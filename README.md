@@ -2,7 +2,7 @@
 title: Agent Skills
 emoji: 🤖
 colorFrom: indigo
-colorTo: cyan
+colorTo: purple
 sdk: streamlit
 sdk_version: "1.56.0"
 python_version: "3.11"

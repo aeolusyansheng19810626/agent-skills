@@ -1,3 +1,15 @@
+---
+title: Agent Skills
+emoji: 🤖
+colorFrom: indigo
+colorTo: cyan
+sdk: streamlit
+sdk_version: "1.56.0"
+python_version: "3.11"
+app_file: app.py
+pinned: false
+---
+
 # 🤖 Router Agent - 统一对话入口
 
 一个智能 AI Agent 系统，通过 LLM 自动识别用户意图并路由到专门的技能模块。系统提供统一的聊天界面，实时显示技能调用状态。

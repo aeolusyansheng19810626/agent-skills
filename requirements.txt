@@ -1,0 +1,15 @@
+# Core dependencies
+streamlit>=1.28.0
+python-dotenv>=1.0.0
+
+# LLM and AI
+groq>=0.4.0
+
+# Web search
+tavily-python>=0.3.0
+
+# Stock analysis
+yfinance>=0.2.32
+
+# Utilities
+requests>=2.31.0

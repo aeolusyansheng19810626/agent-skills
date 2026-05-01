@@ -7,7 +7,7 @@ Called at the natural end of a plan. Returns:
 """
 import os
 import json
-from typing import List
+from typing import List, Tuple, Optional
 from groq import Groq
 
 
@@ -26,9 +26,16 @@ class Evaluator:
         user_query: str,
         accumulated_output: str,
         available_skills: List[str],
+        execution_history: Optional[List[Tuple[str, str]]] = None,
     ) -> dict:
         """
         Judge if accumulated_output sufficiently answers user_query.
+
+        Args:
+            user_query: Original user request
+            accumulated_output: Current accumulated output
+            available_skills: List of available skill names
+            execution_history: List of (skill_name, query) tuples already executed
 
         Fails safe: any exception returns {"action": "continue"} so the
         pipeline never stalls due to evaluator errors.
@@ -38,6 +45,17 @@ class Evaluator:
 
         snippet = accumulated_output[-600:] if accumulated_output else "（无内容）"
         skills_str = ", ".join(available_skills)
+        
+        # Format execution history
+        if execution_history:
+            history_str = "\n已执行的技能历史：\n"
+            for skill_name, query in execution_history:
+                history_str += f"- {skill_name}"
+                if query:
+                    history_str += f"（查询: {query}）"
+                history_str += "\n"
+        else:
+            history_str = ""
 
         prompt = f"""用户的原始需求：
 {user_query}
@@ -46,7 +64,7 @@ class Evaluator:
 {snippet}
 
 可用技能：{skills_str}
-
+{history_str}
 请客观判断当前结果是否已充分满足用户的核心需求：
 - 若已充分 → 返回：{{"action": "continue"}}
 - 若确实存在关键信息缺失 → 返回：{{"action": "next", "skill": "<技能名>", "params": {{<参数字典>}}}}
@@ -55,6 +73,7 @@ class Evaluator:
 1. 仅当结果中缺少回答用户核心需求所必需的关键信息时，才返回 next
 2. 如果用户需求包含条件句（如"如果不足就搜索"），请先客观评估当前结果是否真的不足，不要仅因为用户提到了某个条件动作就推荐该动作
 3. 股票分析结果包含价格、市值、30天涨跌、AI分析段落时，通常已经充分
+4. **防止重复执行**：若相同技能（特别是 web_search）已在历史中执行过，且查询语义相似，则必须返回 continue，不得重复追加
 
 只返回 JSON，不要任何解释。"""
 

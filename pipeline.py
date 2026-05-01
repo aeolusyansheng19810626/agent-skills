@@ -92,6 +92,9 @@ def _execute_plan(
     context = ""
     dynamic_extensions = 0
     idx = 0  # pointer into steps (len(steps) may grow by 1)
+    
+    # Track execution history: list of (skill_name, query) tuples
+    execution_history = []
 
     while idx < len(steps):
         step = steps[idx]
@@ -135,6 +138,10 @@ def _execute_plan(
                 yield chunk
                 step_output += chunk
             context = step_output
+            
+            # Record execution history (skill_name, query)
+            query = params.get("query", "")
+            execution_history.append((skill_name, query))
 
         # ── separator between steps ───────────────────────────────
         if not is_last:
@@ -144,7 +151,7 @@ def _execute_plan(
         if is_last and user_query and dynamic_extensions < _MAX_DYNAMIC_EXTENSIONS:
             from evaluator import Evaluator
             eval_result = Evaluator().evaluate(
-                user_query, context, skill_loader.get_skill_names()
+                user_query, context, skill_loader.get_skill_names(), execution_history
             )
             if eval_result.get("action") == "next":
                 next_skill = eval_result.get("skill", "")
@@ -155,6 +162,9 @@ def _execute_plan(
                     yield f"\x00DYNAMIC_SKILL:{next_skill}\x00"
                     yield f"💡 *评估后追加技能: {next_skill}*\n\n"
                     steps.append({"skill": next_skill, "params": next_params})
+                    # Record the dynamically added skill
+                    query = next_params.get("query", "")
+                    execution_history.append((next_skill, query))
 
 
 def _execute_parallel(

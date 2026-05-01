@@ -171,6 +171,7 @@ class RouterAgent:
                 temperature=0.1,
                 max_tokens=500,
                 response_format={"type": "json_object"},
+                task_type="standard",
             )
             if warning:
                 try:
@@ -257,6 +258,7 @@ class RouterAgent:
                     ],
                     temperature=0.7,
                     max_tokens=1000,
+                    task_type="standard",
                 )
                 if warning:
                     try:

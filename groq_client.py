@@ -1,5 +1,5 @@
 """
-Groq client with 5-tier model fallback.
+Groq client with task-type-based model fallback chains.
 
 TPD (tokens-per-day exhausted) → mark model exhausted, skip to next tier
 RPM (requests-per-minute exceeded) → wait 5 s, retry same model
@@ -7,21 +7,42 @@ All tiers exhausted → raise RuntimeError with friendly message
 
 Degradation state is stored in st.session_state when available (Streamlit context),
 falling back to a module-level set for background threads.
+
+Task types:
+- light: web_search filtering/formatting (fast, simple tasks)
+- standard: Router intent recognition (default)
+- heavy: stock_analysis AI analysis (complex reasoning)
 """
 import os
 import time
-from typing import Optional
+from typing import Optional, List
 from groq import Groq
 
-# ── Tier definitions ──────────────────────────────────────────────────────────
+# ── Task-type-based tier definitions ──────────────────────────────────────────
 
-TIER_TOP       = "openai/gpt-oss-120b"
-TIER_UPPER_MID = "openai/gpt-oss-20b"
-TIER_MID       = "qwen/qwen3-32b"
-TIER_LOW       = "meta-llama/llama-4-scout-17b-16e-instruct"
-TIER_DEBUG     = "llama-3.1-8b-instant"
+# Light tasks: web_search filtering/formatting
+LIGHT_CHAIN = [
+    "llama-3.1-8b-instant",
+    "openai/gpt-oss-20b",
+    "qwen/qwen3-32b",
+]
 
-TIERS = [TIER_TOP, TIER_UPPER_MID, TIER_MID, TIER_LOW, TIER_DEBUG]
+# Standard tasks: Router intent recognition (default)
+STANDARD_CHAIN = [
+    "meta-llama/llama-4-scout-17b-16e-instruct",
+    "openai/gpt-oss-20b",
+    "llama-3.3-70b-versatile",
+]
+
+# Heavy tasks: stock_analysis AI analysis
+HEAVY_CHAIN = [
+    "llama-3.3-70b-versatile",
+    "openai/gpt-oss-20b",
+    "openai/gpt-oss-120b",
+]
+
+# Legacy default chain (for backward compatibility)
+TIERS = STANDARD_CHAIN
 
 # ── Singleton client ──────────────────────────────────────────────────────────
 
@@ -62,20 +83,42 @@ def _mark_exhausted(model: str) -> None:
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-def get_model() -> str:
-    """Return the highest-priority non-exhausted model."""
+def _get_chain_for_task(task_type: str) -> List[str]:
+    """Get the appropriate model chain for the given task type."""
+    if task_type == "light":
+        return LIGHT_CHAIN
+    elif task_type == "heavy":
+        return HEAVY_CHAIN
+    else:  # "standard" or any other value
+        return STANDARD_CHAIN
+
+
+def get_model(task_type: str = "standard") -> str:
+    """
+    Return the highest-priority non-exhausted model for the given task type.
+    
+    Args:
+        task_type: "light", "standard", or "heavy"
+    """
     ex = _exhausted()
-    for tier in TIERS:
+    chain = _get_chain_for_task(task_type)
+    for tier in chain:
         if tier not in ex:
             return tier
     raise RuntimeError("❌ 所有模型均已达到每日限额，请明天再试。")
 
 
-def chat_completion(messages: list, stream: bool = False, **kwargs):
+def chat_completion(messages: list, stream: bool = False, task_type: str = "standard", **kwargs):
     """
     Call Groq chat.completions.create with automatic tier fallback.
 
-    Do NOT pass `model` — it is managed internally.
+    Args:
+        messages: Chat messages
+        stream: Whether to stream the response
+        task_type: "light", "standard", or "heavy" - determines model chain
+        **kwargs: Additional arguments for chat.completions.create
+
+    Do NOT pass `model` — it is managed internally based on task_type.
     Returns (response, warning_str).
       warning_str == "" when no fallback occurred.
       warning_str == "⚠️ 模型降级: <old> → <new>" when a tier was skipped.
@@ -84,7 +127,8 @@ def chat_completion(messages: list, stream: bool = False, **kwargs):
     kwargs.pop("model", None)  # ignore any accidental model kwarg
 
     client = _groq()
-    candidates = [t for t in TIERS if t not in _exhausted()]
+    chain = _get_chain_for_task(task_type)
+    candidates = [t for t in chain if t not in _exhausted()]
     if not candidates:
         raise RuntimeError("❌ 所有模型均已达到每日限额，请明天再试。")
 

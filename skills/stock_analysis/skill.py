@@ -147,7 +147,7 @@ class StockAnalysisSkill:
                 {"role": "user", "content": analysis_prompt},
             ]
             response, warning = groq_client.chat_completion(
-                messages, stream=True, temperature=0.3, max_tokens=800
+                messages, stream=True, temperature=0.3, max_tokens=800, task_type="heavy"
             )
             if warning:
                 yield f"\n\n{warning}\n\n"

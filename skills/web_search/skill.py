@@ -30,6 +30,7 @@ class WebSearchSkill:
                 ],
                 temperature=0.3,
                 max_tokens=2000,
+                task_type="light",
             )
             return response.choices[0].message.content or text
         except Exception:
@@ -77,6 +78,7 @@ class WebSearchSkill:
                 ],
                 temperature=0.2,
                 max_tokens=3000,
+                task_type="light",
             )
             return response.choices[0].message.content or ""
         except Exception as e:

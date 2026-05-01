@@ -2,9 +2,12 @@
 Document Q&A Skill - Answer questions from uploaded documents using in-memory storage
 """
 import os
+import sys
 from typing import Generator, List, Dict, Optional
-from groq import Groq
 import hashlib
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+import groq_client
 
 
 class DocumentStore:
@@ -79,12 +82,6 @@ class DocumentQASkill:
     """Answer questions from documents using RAG approach"""
     
     def __init__(self, document_store: Optional[DocumentStore] = None):
-        api_key = os.getenv("GROQ_API_KEY")
-        if not api_key:
-            raise ValueError("GROQ_API_KEY environment variable not set")
-        self.client = Groq(api_key=api_key)
-        self.model = "llama-3.3-70b-versatile"
-        # Use provided store or fallback to global
         self.store = document_store if document_store is not None else get_document_store()
     
     def execute(self, query: str) -> Generator[str, None, None]:
@@ -136,17 +133,16 @@ class DocumentQASkill:
 
 请提供清晰、简洁的回答，并引用你使用的文档。使用简体中文回答。"""
 
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": "你是一个有帮助的助手，根据提供的文档回答问题。始终引用你的来源。使用简体中文回答。"},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.3,
-                max_tokens=1000,
-                stream=True
+            messages = [
+                {"role": "system", "content": "你是一个有帮助的助手，根据提供的文档回答问题。始终引用你的来源。使用简体中文回答。"},
+                {"role": "user", "content": prompt},
+            ]
+            response, warning = groq_client.chat_completion(
+                messages, stream=True, temperature=0.3, max_tokens=1000
             )
-            
+            if warning:
+                yield f"\n\n{warning}\n\n"
+
             for chunk in response:
                 if chunk.choices[0].delta.content:
                     yield chunk.choices[0].delta.content

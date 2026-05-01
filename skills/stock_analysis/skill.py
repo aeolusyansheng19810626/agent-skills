@@ -2,29 +2,33 @@
 Stock Analysis Skill - Analyze stock data using yfinance and Groq
 """
 import os
+import sys
+import importlib
 from typing import Generator
 import yfinance as yf
 from datetime import datetime, timedelta
-from groq import Groq
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+import groq_client
 
 
 class StockAnalysisSkill:
     """Analyze stock performance with technical and news analysis"""
-    
+
     def __init__(self):
-        api_key = os.getenv("GROQ_API_KEY")
-        if not api_key:
-            raise ValueError("GROQ_API_KEY environment variable not set")
-        self.client = Groq(api_key=api_key)
-        self.model = "llama-3.3-70b-versatile"
+        pass
     
-    def execute(self, ticker: str) -> Generator[str, None, None]:
+    def execute(self, ticker: str, context: str = "") -> Generator[str, None, None]:
         """
-        Execute stock analysis and stream results
-        
+        Execute stock analysis and stream results.
+
         Args:
             ticker: Stock ticker symbol (e.g., AAPL, TSLA)
-            
+            context: Optional prior output from an upstream skill (e.g. web_search)
+                     injected by the pipeline executor via params["context"].
+                     When provided, it is appended to the LLM analysis prompt so
+                     the model can incorporate external news without re-fetching.
+
         Yields:
             Formatted analysis results
         """
@@ -78,31 +82,33 @@ class StockAnalysisSkill:
                 yield f"**最低:** ${hist['Low'].min():.2f}\n\n"
                 yield f"**平均成交量:** {hist['Volume'].mean():,.0f}\n\n"
             
-            # Get news - skip if data is incomplete
-            try:
-                news = stock.news
-                if news and len(news) > 0:
-                    # Filter out news with missing data
-                    valid_news = []
-                    for article in news[:5]:
-                        title = article.get('title') or article.get('headline')
-                        if title and title not in ['No title', '']:
-                            valid_news.append(article)
-                    
-                    if valid_news:
-                        yield "## 📰 最新新闻\n\n"
-                        for idx, article in enumerate(valid_news[:3], 1):
+            # Get news — skip when upstream context already contains news
+            if context:
+                yield "## 📰 背景资讯\n\n"
+                yield "*（已从上一步骤获取，见上方搜索结果）*\n\n"
+            else:
+                try:
+                    news = stock.news
+                    if news and len(news) > 0:
+                        valid_news = []
+                        for article in news[:5]:
                             title = article.get('title') or article.get('headline')
-                            link = article.get('link') or article.get('url') or ''
-                            publisher = article.get('publisher') or article.get('source') or '未知来源'
-                            
-                            yield f"{idx}. **{title}**\n"
-                            yield f"   *来源: {publisher}*\n"
-                            if link:
-                                yield f"   [阅读更多]({link})\n\n"
-            except:
-                # Skip news if there's an error
-                pass
+                            if title and title not in ['No title', '']:
+                                valid_news.append(article)
+
+                        if valid_news:
+                            yield "## 📰 最新新闻\n\n"
+                            for idx, article in enumerate(valid_news[:3], 1):
+                                title = article.get('title') or article.get('headline')
+                                link = article.get('link') or article.get('url') or ''
+                                publisher = article.get('publisher') or article.get('source') or '未知来源'
+
+                                yield f"{idx}. **{title}**\n"
+                                yield f"   *来源: {publisher}*\n"
+                                if link:
+                                    yield f"   [阅读更多]({link})\n\n"
+                except:
+                    pass
             
             # Generate AI analysis
             yield "## 🤖 AI 分析\n\n"
@@ -115,6 +121,10 @@ class StockAnalysisSkill:
             high_str = f"${hist['High'].max():.2f}" if not hist.empty else "N/A"
             low_str = f"${hist['Low'].min():.2f}" if not hist.empty else "N/A"
             
+            context_section = ""
+            if context:
+                context_section = f"\n\n## 背景资讯（来自网络搜索，仅供参考）\n{context[:3000]}\n"
+
             analysis_prompt = f"""分析以下 {company_name} ({ticker}) 的股票数据：
 
 当前价格: {price_str}
@@ -123,25 +133,25 @@ class StockAnalysisSkill:
 30天涨跌: {change:+.2f}%
 30天最高: {high_str}
 30天最低: {low_str}
-
+{context_section}
 请提供简要的技术分析，包括：
 1. 价格趋势和动量
 2. 关键支撑/阻力位
 3. 整体展望（看涨/看跌/中性）
+{"4. 结合背景资讯中与 " + ticker.upper() + " 直接相关的内容，说明近期消息对股价的潜在影响；背景资讯中与 " + ticker.upper() + " 无关的内容请忽略" if context else ""}
 
 保持分析简洁（3-4段）且可操作。请用简体中文回答。"""
 
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": "你是一位金融分析师，提供股票分析。请客观、数据驱动，使用简体中文回答。请避免重复内容，每个观点只陈述一次。"},
-                    {"role": "user", "content": analysis_prompt}
-                ],
-                temperature=0.3,
-                max_tokens=800,
-                stream=True
+            messages = [
+                {"role": "system", "content": "你是一位金融分析师，提供股票分析。请客观、数据驱动，使用简体中文回答。请避免重复内容，每个观点只陈述一次。"},
+                {"role": "user", "content": analysis_prompt},
+            ]
+            response, warning = groq_client.chat_completion(
+                messages, stream=True, temperature=0.3, max_tokens=800
             )
-            
+            if warning:
+                yield f"\n\n{warning}\n\n"
+
             for chunk in response:
                 if chunk.choices[0].delta.content:
                     yield chunk.choices[0].delta.content
@@ -157,11 +167,13 @@ class StockAnalysisSkill:
 
 def run(params: dict) -> Generator[str, None, None]:
     """
-    Entry point for the skill
-    
+    Entry point for the skill.
+
     Args:
-        params: Dictionary with 'ticker' key
-        
+        params: dict with 'ticker' key and optional 'context' key.
+                'context' is injected automatically by pipeline.py when this
+                skill runs after an upstream skill.
+
     Yields:
         Stock analysis results
     """
@@ -169,9 +181,10 @@ def run(params: dict) -> Generator[str, None, None]:
     if not ticker:
         yield "❌ Error: 'ticker' parameter is required\n"
         return
-    
+
+    context = params.get("context", "")
     skill = StockAnalysisSkill()
-    yield from skill.execute(ticker)
+    yield from skill.execute(ticker, context)
 
 
 # For testing

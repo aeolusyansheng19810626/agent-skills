@@ -2,19 +2,18 @@
 Code Generation Skill - Generate code based on user requirements using Groq
 """
 import os
+import sys
 from typing import Generator
-from groq import Groq
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+import groq_client
 
 
 class CodeGenerationSkill:
     """Generate code in various programming languages"""
-    
+
     def __init__(self):
-        api_key = os.getenv("GROQ_API_KEY")
-        if not api_key:
-            raise ValueError("GROQ_API_KEY environment variable not set")
-        self.client = Groq(api_key=api_key)
-        self.model = "llama-3.3-70b-versatile"
+        pass
     
     def execute(self, requirement: str, language: str = "Python") -> Generator[str, None, None]:
         """
@@ -46,18 +45,16 @@ class CodeGenerationSkill:
 
 请提供完整、可运行的代码。使用简体中文注释和说明。"""
 
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": f"你是一位专业的 {language} 程序员。生成简洁、高效、文档完善的代码。所有注释和说明使用简体中文。"},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.2,
-                max_tokens=2000,
-                stream=True
+            messages = [
+                {"role": "system", "content": f"你是一位专业的 {language} 程序员。生成简洁、高效、文档完善的代码。所有注释和说明使用简体中文。"},
+                {"role": "user", "content": prompt},
+            ]
+            response, warning = groq_client.chat_completion(
+                messages, stream=True, temperature=0.2, max_tokens=2000
             )
-            
-            # Stream the code generation
+            if warning:
+                yield f"\n\n{warning}\n\n"
+
             for chunk in response:
                 if chunk.choices[0].delta.content:
                     yield chunk.choices[0].delta.content

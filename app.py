@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from router import RouterAgent
 from skill_loader import get_skill_loader
 from skills.document_qa.skill import DocumentStore
+import pipeline
 
 # 加载环境变量
 load_dotenv()
@@ -150,24 +151,20 @@ def display_sidebar():
         """)
 
 
-def execute_skill(skill_name: str, params: dict):
-    """执行技能并流式输出结果"""
-    try:
-        # 导入技能模块
-        skill_module = st.session_state.skill_loader.import_skill_module(skill_name)
-        
-        # 如果是 document_qa skill，传入 document_store
-        if skill_name == "document_qa":
-            params["document_store"] = st.session_state.document_store
-        
-        # 执行技能的 run 函数
-        if hasattr(skill_module, 'run'):
-            yield from skill_module.run(params)
-        else:
-            yield f"❌ 错误: 技能 '{skill_name}' 没有 'run' 函数\n"
-    
-    except Exception as e:
-        yield f"❌ 执行技能 '{skill_name}' 时出错: {str(e)}\n"
+def _inject_document_store(routing_result: dict):
+    """Inject session document_store into params for document_qa steps."""
+    if "plan" in routing_result:
+        for step in routing_result["plan"]:
+            if step.get("skill") == "document_qa":
+                step["params"]["document_store"] = st.session_state.document_store
+    elif routing_result.get("skill") == "document_qa":
+        routing_result["params"]["document_store"] = st.session_state.document_store
+
+
+def execute_skill(routing_result: dict, user_query: str = ""):
+    """执行路由结果（单技能或 pipeline），流式输出结果"""
+    _inject_document_store(routing_result)
+    yield from pipeline.execute(routing_result, st.session_state.skill_loader, user_query=user_query)
 
 
 def process_user_input(user_input: str):
@@ -185,35 +182,62 @@ def process_user_input(user_input: str):
         with st.spinner("🤔 正在分析你的请求..."):
             routing_result = st.session_state.router.route(user_input)
         
-        skill_name = routing_result.get("skill")
-        params = routing_result.get("params", {})
         reasoning = routing_result.get("reasoning", "")
-        
+        is_plan = "plan" in routing_result
+        skill_name = routing_result.get("skill", "none")
+        is_active = is_plan or skill_name != "none"
+
         # 显示正在调用的技能
-        if skill_name != "none":
-            st.markdown(f'<div class="skill-calling">🔧 正在调用: <code>{skill_name}</code></div>', unsafe_allow_html=True)
-            
+        if is_active:
+            if is_plan:
+                steps = routing_result["plan"]
+                def _step_label(s):
+                    if "parallel" in s:
+                        return "(" + " ‖ ".join(sub["skill"] for sub in s["parallel"]) + ")"
+                    return s.get("skill", "?")
+                label = " → ".join(_step_label(s) for s in steps)
+            else:
+                label = None  # will be set in placeholder below
+
+            # 执行技能（单个或 pipeline）并收集结果
+            skill_label = skill_name if not is_plan else label
+            current_model = st.session_state.router.model
+            _MARKER_PREFIX = "\x00DYNAMIC_SKILL:"
+
+            full_response = ""
+            spinner_label = f'{"Pipeline: " if is_plan else "正在调用: "}{skill_label}'
+            with st.spinner(spinner_label):
+                for chunk in execute_skill(routing_result, user_query=user_input):
+                    if _MARKER_PREFIX in chunk:
+                        dynamic_name = chunk.split(_MARKER_PREFIX)[1].rstrip("\x00").strip()
+                        skill_label = skill_label + f" → ✨{dynamic_name}"
+                    else:
+                        full_response += chunk
+
+            # 渲染最终气泡（最上方，在推理过程之前）
+            prefix = "Pipeline: " if (is_plan or " → " in skill_label) else "已调用: "
+            st.markdown(
+                f'<div class="skill-calling">🔧 {prefix}<code>{skill_label}</code> &nbsp;·&nbsp; 模型: <code>{current_model}</code></div>',
+                unsafe_allow_html=True,
+            )
+
             # 使用可折叠组件显示推理过程
             with st.expander("💭 查看推理过程"):
                 st.markdown(f"**模型:** `{st.session_state.router.model}`\n\n")
                 st.markdown(f"**推理:** {reasoning}")
-            
-            # 执行技能并流式输出结果到临时变量
-            full_response = ""
-            for chunk in execute_skill(skill_name, params):
-                full_response += chunk
-            
+
             # 将结果放在可折叠的气泡中（在横线上方）
             with st.expander("📄 查看完整结果", expanded=True):
                 st.markdown(full_response)
-            
+
             st.markdown("---")
-            
+
             # 保存助手响应
+            display_skill = f"pipeline:{label}" if is_plan else skill_name
             st.session_state.messages.append({
                 "role": "assistant",
                 "content": full_response,
-                "skill": skill_name,
+                "skill": display_skill,
                 "reasoning": reasoning
             })
         
@@ -260,7 +284,9 @@ def main():
         with st.chat_message(message["role"]):
             if message["role"] == "assistant" and "skill" in message:
                 if message["skill"] != "none":
-                    st.markdown(f'<div class="skill-calling">🔧 已调用: <code>{message["skill"]}</code></div>', unsafe_allow_html=True)
+                    prefix = "Pipeline" if message["skill"].startswith("pipeline:") else "已调用"
+                    label = message["skill"].removeprefix("pipeline:")
+                    st.markdown(f'<div class="skill-calling">🔧 {prefix}: <code>{label}</code></div>', unsafe_allow_html=True)
                     if "reasoning" in message:
                         # 使用可折叠组件显示推理过程
                         with st.expander("💭 查看推理过程"):

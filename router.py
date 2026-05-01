@@ -3,19 +3,55 @@ Router Agent - Uses LLM to determine which skill to call based on user input
 """
 import os
 import json
+import unicodedata
 from typing import Dict, Optional, Any
-from groq import Groq
 from skill_loader import get_skill_loader
+import groq_client
+
+
+def _sanitize_reasoning(text: str, result: dict) -> str:
+    """Return a readable Chinese reasoning string, falling back to an auto-generated one."""
+    if not isinstance(text, str) or not text.strip():
+        return _auto_reasoning(result)
+    # Check ratio of CJK + ASCII printable chars; reject if too low (garbled text)
+    total = len(text)
+    readable = sum(
+        1 for ch in text
+        if unicodedata.category(ch) in ("Lo", "Nd", "Zs", "Po", "Ps", "Pe")
+        or (0x20 <= ord(ch) <= 0x7E)
+    )
+    if total > 0 and readable / total < 0.6:
+        return _auto_reasoning(result)
+    return text
+
+
+def _auto_reasoning(result: dict) -> str:
+    if "plan" in result:
+        parts = []
+        for step in result["plan"]:
+            if "parallel" in step:
+                names = "、".join(s.get("skill", "?") for s in step["parallel"])
+                parts.append(f"并行执行（{names}）")
+            else:
+                parts.append(step.get("skill", "?"))
+        return "计划执行：" + " → ".join(parts)
+    skill = result.get("skill", "none")
+    return f"调用技能：{skill}" if skill != "none" else "无匹配技能"
 
 
 class RouterAgent:
     """Routes user queries to appropriate skills using LLM"""
     
-    def __init__(self, model: str = "llama-3.3-70b-versatile"):
-        self.client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-        self.model = model
+    def __init__(self, model: str = None):
         self.skill_loader = get_skill_loader()
         self.system_prompt = self._build_system_prompt()
+
+    @property
+    def model(self) -> str:
+        try:
+            return groq_client.get_model()
+        except RuntimeError:
+            return "（所有模型已耗尽）"
     
     def _build_system_prompt(self) -> str:
         """Build system prompt with all skill descriptions"""
@@ -29,10 +65,41 @@ class RouterAgent:
 
 # 你的任务
 
-分析用户的查询并确定应该调用哪个技能。返回一个 JSON 对象，包含：
-- "skill": 技能名称（例如："web_search"、"stock_analysis"、"document_qa"、"code_generation"）
-- "params": 该技能所需的参数字典
-- "reasoning": 简要说明为什么选择这个技能（必须使用简体中文）
+分析用户的查询，返回以下两种格式之一：
+
+## 格式一：单技能（默认）
+适用于只需调用一个技能的情况。
+{{
+  "skill": "技能名称",
+  "params": {{}},
+  "reasoning": "简体中文说明"
+}}
+
+## 格式二：Pipeline — 串行
+适用于用户意图明确需要"先做A再做B"的情况，例如"搜索后分析"、"先查再总结"。
+{{
+  "plan": [
+    {{"skill": "技能名称1", "params": {{}}}},
+    {{"skill": "技能名称2", "params": {{}}}}
+  ],
+  "reasoning": "简体中文说明"
+}}
+注意：plan 中后续技能会自动接收前一技能的输出作为 context 参数，无需在 params 中手动填写 context。
+
+## 格式三：Pipeline — 并行组
+适用于用户需要"同时/并行"执行多个技能，各技能独立运行后汇总结果。
+使用 "parallel" 字段代替 "skill"，值为技能对象数组。
+{{
+  "plan": [
+    {{"parallel": [
+      {{"skill": "技能名称A", "params": {{}}}},
+      {{"skill": "技能名称B", "params": {{}}}}
+    ]}},
+    {{"skill": "技能名称C", "params": {{}}}}
+  ],
+  "reasoning": "简体中文说明"
+}}
+注意：parallel 组内所有技能同时启动，汇总后的结果作为 context 传给后续串行步骤。
 
 如果没有匹配的技能，返回：
 {{"skill": "none", "params": {{}}, "reasoning": "说明原因"}}
@@ -51,6 +118,15 @@ class RouterAgent:
 用户："文档中关于定价的内容是什么？"
 响应：{{"skill": "document_qa", "params": {{"query": "定价信息"}}, "reasoning": "用户询问文档内容"}}
 
+用户："搜索英伟达最新消息后分析NVDA股票"
+响应：{{"plan": [{{"skill": "web_search", "params": {{"query": "英伟达最新消息"}}}}, {{"skill": "stock_analysis", "params": {{"ticker": "NVDA"}}}}], "reasoning": "用户需要先搜索英伟达最新消息，再结合搜索结果进行股票分析"}}
+
+用户："先搜一下特斯拉的新闻，再帮我分析TSLA"
+响应：{{"plan": [{{"skill": "web_search", "params": {{"query": "特斯拉最新新闻"}}}}, {{"skill": "stock_analysis", "params": {{"ticker": "TSLA"}}}}], "reasoning": "用户明确要求先搜索新闻再分析股票，使用Pipeline"}}
+
+用户："同时帮我搜索英伟达新闻和分析NVDA股票"
+响应：{{"plan": [{{"parallel": [{{"skill": "web_search", "params": {{"query": "英伟达最新新闻"}}}}, {{"skill": "stock_analysis", "params": {{"ticker": "NVDA"}}}}]}}], "reasoning": "用户明确要求同时执行搜索和股票分析，使用并行组"}}
+
 # 重要规则
 
 1. 始终返回有效的 JSON
@@ -59,7 +135,11 @@ class RouterAgent:
 4. 如果多个技能都适用，选择最具体的那个
 5. 仔细考虑触发条件和不触发条件
 6. 对于 code_generation，如果未指定语言则默认为 "Python"
-7. reasoning 字段必须使用简体中文回答，不要使用繁体中文
+7. reasoning 字段必须是一句通顺的简体中文，简明说明为什么选择该技能或计划。例如："用户同时要求搜索苹果新闻和分析AAPL股票，使用并行组同时执行。" 禁止输出乱码、繁体中文或非中文内容
+8. 仅当用户明确表达串行意图（"搜索后分析"、"先查再..."等）时才使用串行 plan；单一意图始终用单技能格式
+9. 仅当用户明确表达并行意图（"同时"、"并行"、"一起"等）时才在 plan 中使用 parallel 组
+11. 当用户使用条件句（"如果...就..."、"不足则..."、"必要时..."、"如有需要..."等）描述后续动作时，属于动态意图，只返回第一步技能（单技能格式），不要创建固定 plan。后续步骤由系统自动评估是否需要追加
+10. plan 模式中 web_search 的 query 参数必须忠实还原用户的搜索意图原文，不得改写、翻译或替换为其他词语
 
 现在分析用户的查询并返回适当的 JSON 响应。
 """
@@ -76,33 +156,61 @@ class RouterAgent:
             Dictionary with skill, params, and reasoning
         """
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": user_query}
-                ],
+            messages = [
+                {"role": "system", "content": self.system_prompt},
+                {"role": "user", "content": user_query},
+            ]
+            response, warning = groq_client.chat_completion(
+                messages,
                 temperature=0.1,
                 max_tokens=500,
-                response_format={"type": "json_object"}
+                response_format={"type": "json_object"},
             )
-            
+            if warning:
+                try:
+                    import streamlit as st
+                    st.toast(warning, icon="⚠️")
+                except Exception:
+                    pass
+
             content = response.choices[0].message.content
             if content is None:
                 raise ValueError("LLM returned empty response")
             result = json.loads(content)
             
             # Validate result structure
-            if "skill" not in result:
-                raise ValueError("Response missing 'skill' field")
-            if "params" not in result:
-                result["params"] = {}
             if "reasoning" not in result:
                 result["reasoning"] = "No reasoning provided"
-            
-            # Validate skill exists
-            if result["skill"] != "none" and result["skill"] not in self.skill_loader.get_skill_names():
-                raise ValueError(f"Unknown skill: {result['skill']}")
+            else:
+                result["reasoning"] = _sanitize_reasoning(result["reasoning"], result)
+
+            if "plan" in result:
+                # Pipeline format: validate each step (serial skill or parallel group)
+                valid_names = self.skill_loader.get_skill_names()
+                for step in result["plan"]:
+                    if "parallel" in step:
+                        for sub in step["parallel"]:
+                            if "skill" not in sub:
+                                raise ValueError("Parallel sub-step missing 'skill' field")
+                            if sub["skill"] not in valid_names:
+                                raise ValueError(f"Unknown skill in parallel: {sub['skill']}")
+                            if "params" not in sub:
+                                sub["params"] = {}
+                    elif "skill" in step:
+                        if step["skill"] not in valid_names:
+                            raise ValueError(f"Unknown skill in plan: {step['skill']}")
+                        if "params" not in step:
+                            step["params"] = {}
+                    else:
+                        raise ValueError("Plan step must have 'skill' or 'parallel' field")
+            else:
+                # Single skill format
+                if "skill" not in result:
+                    raise ValueError("Response missing 'skill' field")
+                if "params" not in result:
+                    result["params"] = {}
+                if result["skill"] != "none" and result["skill"] not in self.skill_loader.get_skill_names():
+                    raise ValueError(f"Unknown skill: {result['skill']}")
             
             return result
             
@@ -136,15 +244,20 @@ class RouterAgent:
         # If no skill matches, generate a direct response
         if result["skill"] == "none":
             try:
-                response = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[
+                response, warning = groq_client.chat_completion(
+                    [
                         {"role": "system", "content": "You are a helpful assistant. Answer the user's question directly and concisely."},
-                        {"role": "user", "content": user_query}
+                        {"role": "user", "content": user_query},
                     ],
                     temperature=0.7,
-                    max_tokens=1000
+                    max_tokens=1000,
                 )
+                if warning:
+                    try:
+                        import streamlit as st
+                        st.toast(warning, icon="⚠️")
+                    except Exception:
+                        pass
                 result["direct_response"] = response.choices[0].message.content
             except Exception as e:
                 result["direct_response"] = f"I couldn't process your request. Error: {str(e)}"

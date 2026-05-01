@@ -162,7 +162,6 @@ class RouterAgent:
             Dictionary with skill, params, and reasoning
         """
         try:
-            print(f"[DEBUG router] Processing user_query: {user_query}")
             messages = [
                 {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": user_query},
@@ -185,7 +184,6 @@ class RouterAgent:
             if content is None:
                 raise ValueError("LLM returned empty response")
             result = json.loads(content)
-            print(f"[DEBUG router] LLM returned result: {json.dumps(result, ensure_ascii=False)}")
             
             # Validate result structure
             if "reasoning" not in result:

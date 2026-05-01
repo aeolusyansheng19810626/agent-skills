@@ -40,14 +40,16 @@ class WebSearchSkill:
         """Use LLM to filter noise and format results uniformly"""
         try:
             print(f"[DEBUG filter] Starting filter with query='{query}', max_results={max_results}, num_results={len(results)}")
-            # Prepare raw content for LLM
+            # Prepare raw content for LLM, but truncate each result to avoid token limits
+            # llama-3.1-8b-instant has ~6000 token limit, roughly 4000 chars per result is safe
+            MAX_CONTENT_PER_RESULT = 800  # Conservative limit per result
             raw_content = ""
             for idx, result in enumerate(results, 1):
                 title = result.get("title", "")
-                content = result.get("content", "")
+                content = result.get("content", "")[:MAX_CONTENT_PER_RESULT]  # Truncate content
                 url = result.get("url", "")
                 raw_content += f"\n[结果{idx}]\n标题: {title}\n内容: {content}\nURL: {url}\n"
-            print(f"[DEBUG filter] Raw content length: {len(raw_content)} chars")
+            print(f"[DEBUG filter] Raw content length after truncation: {len(raw_content)} chars")
             
             prompt = f"""你是一个信息过滤助手。用户搜索："{query}"
 

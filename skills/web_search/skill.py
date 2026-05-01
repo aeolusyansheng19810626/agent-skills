@@ -148,7 +148,7 @@ class WebSearchSkill:
             if not results:
                 results = response["results"]
 
-            yield f"✅ 找到 {len(results)} 条结果，正在过滤和格式化...\n\n"
+            yield f"✅ 正在过滤和格式化...\n\n"
             
             # Use LLM to filter noise and format results uniformly
             filtered_output = self.filter_and_format_results(query, results, max_results)

@@ -142,6 +142,7 @@ def _execute_plan(
             # Record execution history (skill_name, query)
             query = params.get("query", "")
             execution_history.append((skill_name, query))
+            print(f"[DEBUG pipeline] Recorded in history: ({skill_name}, {query})")
 
         # ── separator between steps ───────────────────────────────
         if not is_last:
@@ -150,9 +151,11 @@ def _execute_plan(
         # ── dynamic evaluation at the natural end of the plan ─────
         if is_last and user_query and dynamic_extensions < _MAX_DYNAMIC_EXTENSIONS:
             from evaluator import Evaluator
+            print(f"[DEBUG pipeline] Calling evaluator with execution_history: {execution_history}")
             eval_result = Evaluator().evaluate(
                 user_query, context, skill_loader.get_skill_names(), execution_history
             )
+            print(f"[DEBUG pipeline] Evaluator returned: {eval_result}")
             if eval_result.get("action") == "next":
                 next_skill = eval_result.get("skill", "")
                 next_params = eval_result.get("params", {})
@@ -165,6 +168,7 @@ def _execute_plan(
                     # Record the dynamically added skill
                     query = next_params.get("query", "")
                     execution_history.append((next_skill, query))
+                    print(f"[DEBUG pipeline] Added dynamic skill to history: ({next_skill}, {query})")
 
 
 def _execute_parallel(

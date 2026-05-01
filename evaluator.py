@@ -40,6 +40,7 @@ class Evaluator:
         Fails safe: any exception returns {"action": "continue"} so the
         pipeline never stalls due to evaluator errors.
         """
+        print(f"[DEBUG evaluator] Called with execution_history: {execution_history}")
         if not user_query:
             return {"action": "continue"}
 
@@ -54,8 +55,10 @@ class Evaluator:
                 if query:
                     history_str += f"（查询: {query}）"
                 history_str += "\n"
+            print(f"[DEBUG evaluator] Formatted history_str:\n{history_str}")
         else:
             history_str = ""
+            print("[DEBUG evaluator] No execution history provided")
 
         prompt = f"""用户的原始需求：
 {user_query}
@@ -90,8 +93,10 @@ class Evaluator:
             )
             raw = response.choices[0].message.content or "{}"
             result = json.loads(raw)
+            print(f"[DEBUG evaluator] LLM returned: {result}")
             if result.get("action") not in ("continue", "next"):
                 return {"action": "continue"}
             return result
-        except Exception:
+        except Exception as e:
+            print(f"[DEBUG evaluator] Exception: {e}")
             return {"action": "continue"}

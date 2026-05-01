@@ -39,6 +39,7 @@ class WebSearchSkill:
     def filter_and_format_results(self, query: str, results: list, max_results: int) -> str:
         """Use LLM to filter noise and format results uniformly"""
         try:
+            print(f"[DEBUG filter] Starting filter with query='{query}', max_results={max_results}, num_results={len(results)}")
             # Prepare raw content for LLM
             raw_content = ""
             for idx, result in enumerate(results, 1):
@@ -46,6 +47,7 @@ class WebSearchSkill:
                 content = result.get("content", "")
                 url = result.get("url", "")
                 raw_content += f"\n[结果{idx}]\n标题: {title}\n内容: {content}\nURL: {url}\n"
+            print(f"[DEBUG filter] Raw content length: {len(raw_content)} chars")
             
             prompt = f"""你是一个信息过滤助手。用户搜索："{query}"
 
@@ -71,6 +73,7 @@ class WebSearchSkill:
 - 每条结果之间用 --- 分隔
 - 只输出过滤后的结果，不要添加任何解释"""
 
+            print(f"[DEBUG filter] Calling LLM for filtering...")
             response, _ = groq_client.chat_completion(
                 [
                     {"role": "system", "content": "你是一个专业的信息过滤助手。严格按照要求格式输出，不添加任何额外内容。"},
@@ -80,8 +83,12 @@ class WebSearchSkill:
                 max_tokens=3000,
                 task_type="light",
             )
-            return response.choices[0].message.content or ""
+            filtered = response.choices[0].message.content or ""
+            print(f"[DEBUG filter] LLM returned {len(filtered)} chars")
+            print(f"[DEBUG filter] First 500 chars of filtered output:\n{filtered[:500]}")
+            return filtered
         except Exception as e:
+            print(f"[DEBUG filter] Exception during filtering: {e}")
             # Fallback: return original results with basic formatting
             output = ""
             for idx, result in enumerate(results[:max_results], 1):
@@ -89,6 +96,7 @@ class WebSearchSkill:
                 content = result.get("content", "暂无内容")
                 url = result.get("url", "")
                 output += f"### {title}\n\n{content}\n\n来源：{url}\n\n---\n\n"
+            print(f"[DEBUG filter] Using fallback formatting, output length: {len(output)} chars")
             return output
     
     def execute(self, query: str, max_results: int = 3) -> Generator[str, None, None]:
@@ -103,7 +111,9 @@ class WebSearchSkill:
             Formatted search results with sources
         """
         try:
-            yield f"🔍 正在搜索: **{query}**\n\n"
+            # DEBUG: Log max_results parameter
+            print(f"[DEBUG web_search] Received max_results={max_results}")
+            yield f"🔍 正在搜索: **{query}** (max_results={max_results})\n\n"
             
             # Inject current date into query to bias toward recent results
             today = datetime.now()
@@ -111,6 +121,7 @@ class WebSearchSkill:
 
             # Request more results from Tavily to have options for filtering
             tavily_max = max(max_results * 2, 8)
+            print(f"[DEBUG web_search] Calling Tavily with max_results={tavily_max}")
             response = self.client.search(
                 query=dated_query,
                 search_depth="advanced",
@@ -141,10 +152,13 @@ class WebSearchSkill:
             if not results:
                 results = response["results"]
 
-            yield f"✅ 找到 {len(results)} 条原始结果，正在过滤和格式化...\n\n"
+            print(f"[DEBUG web_search] Found {len(results)} results after date filtering")
+            yield f"✅ 找到 {len(results)} 条原始结果，正在过滤和格式化（目标: {max_results} 条）...\n\n"
             
             # Use LLM to filter noise and format results uniformly
+            print(f"[DEBUG web_search] Calling filter_and_format_results with max_results={max_results}")
             filtered_output = self.filter_and_format_results(query, results, max_results)
+            print(f"[DEBUG web_search] Filter output length: {len(filtered_output)} chars")
             
             yield "## 📰 搜索结果\n\n"
             yield filtered_output
@@ -163,12 +177,14 @@ def run(params: dict) -> Generator[str, None, None]:
     Yields:
         Search results
     """
+    print(f"[DEBUG web_search.run] Received params: {params}")
     query = params.get("query")
     if not query:
         yield "❌ Error: 'query' parameter is required\n"
         return
     
     max_results = params.get("max_results", 3)  # Default to 3 results
+    print(f"[DEBUG web_search.run] Extracted max_results={max_results} from params")
     
     skill = WebSearchSkill()
     yield from skill.execute(query, max_results)

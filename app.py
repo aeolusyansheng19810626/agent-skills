@@ -103,6 +103,16 @@ input, textarea, select { font-family: inherit; font-size: inherit; color: inher
 }
 
 .msg-hook { display: none !important; }
+
+/* 文档列表删除按钮 — 紧凑小图标 */
+[data-testid="stSidebar"] [data-testid="stHorizontalBlock"] [data-testid="stColumn"]:last-child button {
+    padding: 0 4px !important;
+    min-height: 24px !important;
+    height: 24px !important;
+    font-size: 14px !important;
+    border-radius: 4px !important;
+    margin-top: 2px !important;
+}
 """
 
 streamlit_overrides = """
@@ -907,7 +917,7 @@ def display_sidebar():
                 content = uploaded_file.read().decode('utf-8')
                 doc_id = doc_store.add_document(content, uploaded_file.name)
                 st.session_state.uploaded_files.add(file_key)
-                st.success(f"{t('doc_added')}: {uploaded_file.name} (ID: {doc_id})")
+                st.success(f"{t('doc_added')}: {uploaded_file.name}")
             else:
                 st.info(f"{t('doc_exists')}: {uploaded_file.name}")
 

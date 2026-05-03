@@ -104,6 +104,16 @@ input, textarea, select { font-family: inherit; font-size: inherit; color: inher
 
 .msg-hook { display: none !important; }
 
+/* st.success / st.info 图标垂直居中 */
+[data-testid="stAlert"] {
+    align-items: center !important;
+}
+[data-testid="stAlert"] [data-testid="stAlertContentIcon"] {
+    margin-top: 0 !important;
+    padding-top: 0 !important;
+    align-self: center !important;
+}
+
 /* 文档列表删除按钮 — 紧凑小图标 */
 [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] [data-testid="stColumn"]:last-child button {
     padding: 0 4px !important;

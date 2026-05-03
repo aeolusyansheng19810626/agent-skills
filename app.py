@@ -913,7 +913,7 @@ def display_sidebar():
             st.info(t('no_docs'))
 
         if st.button(t('clear_all_docs'), key="clear_docs_btn", use_container_width=True, type="secondary"):
-            doc_store.clear()
+            st.session_state.document_store = DocumentStore()  # 重新创建新的实例
             if "uploaded_files" in st.session_state:
                 st.session_state.uploaded_files.clear()  # 同时清空上传记录
             st.success(t('all_docs_cleared'))

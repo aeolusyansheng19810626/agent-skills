@@ -29,7 +29,7 @@ class SkillLoader:
                     skill_data['name'] = skill_name
                     skill_data['path'] = str(skill_dir)
                     self.skills[skill_name] = skill_data
-                    print(f"✓ Loaded skill: {skill_name}")
+                    print(f"[OK] Loaded skill: {skill_name}")
     
     def _parse_skill_md(self, md_path: Path) -> Dict:
         """Parse skill.md file and extract metadata"""

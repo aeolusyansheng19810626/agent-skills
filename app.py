@@ -829,6 +829,8 @@ def initialize_session_state():
         st.session_state.document_store = DocumentStore()
     if "lang" not in st.session_state:
         st.session_state.lang = "zh"
+    if "uploader_key" not in st.session_state:
+        st.session_state.uploader_key = 0
 
 
 def display_sidebar():
@@ -889,7 +891,7 @@ def display_sidebar():
         if "uploaded_files" not in st.session_state:
             st.session_state.uploaded_files = set()
 
-        uploaded_file = st.file_uploader("", type=['txt', 'md'], key="doc_uploader")
+        uploaded_file = st.file_uploader("", type=['txt', 'md'], key=f"doc_uploader_{st.session_state.uploader_key}")
         if uploaded_file is not None:
             # 生成文件的唯一标识
             file_key = f"{uploaded_file.name}_{uploaded_file.size}"
@@ -913,11 +915,11 @@ def display_sidebar():
             st.info(t('no_docs'))
 
         if st.button(t('clear_all_docs'), key="clear_docs_btn", use_container_width=True, type="secondary"):
-            st.session_state.document_store = DocumentStore()  # 重新创建新的实例
+            st.session_state.document_store = DocumentStore()
             if "uploaded_files" in st.session_state:
-                st.session_state.uploaded_files.clear()  # 同时清空上传记录
+                st.session_state.uploaded_files.clear()
+            st.session_state.uploader_key += 1  # 重置文件上传组件，避免文档被重新添加
             st.success(t('all_docs_cleared'))
-            # 使用 st.rerun() 刷新页面
             st.rerun()
 
         st.markdown("---")

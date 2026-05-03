@@ -918,7 +918,7 @@ def display_sidebar():
             for doc in docs:
                 col1, col2 = st.columns([4, 1])
                 with col1:
-                    st.markdown(f"- {doc['filename']} `{doc['id']}`")
+                    st.markdown(f"- {doc['filename']}")
                 with col2:
                     if st.button("🗑️", key=f"del_{doc['id']}", use_container_width=True):
                         doc_store.remove_document(doc['id'])

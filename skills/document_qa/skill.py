@@ -69,6 +69,10 @@ class DocumentStore:
         """Get all documents"""
         return self.documents
     
+    def remove_document(self, doc_id: str):
+        """Remove a single document by ID"""
+        self.documents = [d for d in self.documents if d["id"] != doc_id]
+
     def clear(self):
         """Clear all documents"""
         self.documents.clear()

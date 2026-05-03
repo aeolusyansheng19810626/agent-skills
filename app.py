@@ -699,6 +699,8 @@ i18n = {
         "stock_analysis_ticker": "股票代码",
         "web_search_desc": "搜索互联网获取最新信息，适用于需要实时数据、新闻、时事的问题。",
         "web_search_query": "搜索关键词",
+        "delete_doc": "删除",
+        "doc_deleted": "✅ 文档已删除",
     },
     "ja": {
         "brand_title": "Router Agent",
@@ -743,6 +745,8 @@ i18n = {
         "stock_analysis_ticker": "ｽﾄｯｸｺｰﾄﾞ",
         "web_search_desc": "ｲﾝﾀｰﾈｯﾄを検索してｺﾞ最新情報を取得し、ﾘｱﾙﾀｲﾑﾃﾞｰﾀ、ﾆｭｰｽ、時事ｲﾝﾌｫﾒｰｼｮﾝが必要な質問に適しています。",
         "web_search_query": "検索ｷｰﾜｰﾄﾞ",
+        "delete_doc": "削除",
+        "doc_deleted": "✅ ﾄﾞｷｭﾒﾝﾄが削除されました",
     },
     "en": {
         "brand_title": "Router Agent",
@@ -787,6 +791,8 @@ i18n = {
         "stock_analysis_ticker": "Stock ticker",
         "web_search_desc": "Search the internet to obtain the latest information, suitable for questions requiring real-time data, news, and current events.",
         "web_search_query": "Search keywords",
+        "delete_doc": "Delete",
+        "doc_deleted": "✅ Document deleted",
     }
 }
 
@@ -910,7 +916,21 @@ def display_sidebar():
         if docs:
             st.markdown(f"**{t('knowledge_base_docs')}:** {len(docs)}")
             for doc in docs:
-                st.markdown(f"- {doc['filename']} (ID: {doc['id']})")
+                col1, col2 = st.columns([4, 1])
+                with col1:
+                    st.markdown(f"- {doc['filename']} `{doc['id']}`")
+                with col2:
+                    if st.button(t('delete_doc'), key=f"del_{doc['id']}", use_container_width=True):
+                        doc_store.remove_document(doc['id'])
+                        if "uploaded_files" in st.session_state:
+                            # 清除该文件对应的上传记录，允许重新上传同名文件
+                            st.session_state.uploaded_files = {
+                                k for k in st.session_state.uploaded_files
+                                if not k.startswith(doc['filename'] + '_')
+                            }
+                        st.session_state.uploader_key += 1
+                        st.success(t('doc_deleted'))
+                        st.rerun()
         else:
             st.info(t('no_docs'))
 

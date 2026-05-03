@@ -920,7 +920,7 @@ def display_sidebar():
                 with col1:
                     st.markdown(f"- {doc['filename']} `{doc['id']}`")
                 with col2:
-                    if st.button(t('delete_doc'), key=f"del_{doc['id']}", use_container_width=True):
+                    if st.button("🗑️", key=f"del_{doc['id']}", use_container_width=True):
                         doc_store.remove_document(doc['id'])
                         if "uploaded_files" in st.session_state:
                             # 清除该文件对应的上传记录，允许重新上传同名文件

@@ -1112,7 +1112,7 @@ def main():
     skill_count = len(st.session_state.skill_loader.get_all_skills()) if "skill_loader" in st.session_state else 0
     skills_text = t("skill_text")
     skills_loaded = t("skills_loaded")
-    topbar_html = f"""<div class='topbar-wrapper'><div class='topbar'><div class='topbar-left'><div class='page-title'>{t('topbar_title')}</div><div class='page-sub'>{t('topbar_sub')}</div></div><div class='topbar-right'><div class='status'><span class='status-dot'></span>{skills_loaded}{skill_count}{skills_text}</div><div id='lang-switcher-anchor'></div></div></div></div></div>"""
+    topbar_html = f"""<div class='topbar-wrapper'><div class='topbar'><div class='topbar-left'><div class='page-title'>{t('topbar_title')}</div><div class='page-sub'>{t('topbar_sub')}</div></div><div class='topbar-right'><div class='status'><span class='status-dot'></span>{skills_loaded} {skill_count} {skills_text}</div><div id='lang-switcher-anchor'></div></div></div></div></div>"""
     st.markdown(topbar_html, unsafe_allow_html=True)
 
     # Language Switcher - positioned in topbar via CSS (position:fixed)

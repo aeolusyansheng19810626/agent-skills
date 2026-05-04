@@ -1,5 +1,5 @@
 """
-Code Generation Skill - Generate code based on user requirements using Groq
+コード生成スキル - Groqを使用してユーザー要件に基づいてコードを生成
 """
 import os
 import sys
@@ -10,27 +10,27 @@ import groq_client
 
 
 class CodeGenerationSkill:
-    """Generate code in various programming languages"""
+    """様々なプログラミング言語でコードを生成"""
 
     def __init__(self):
         pass
     
     def execute(self, requirement: str, language: str = "Python") -> Generator[str, None, None]:
         """
-        Execute code generation and stream results
+        コード生成を実行して結果をストリーム
         
         Args:
-            requirement: Description of what code to generate
-            language: Programming language (default: Python)
+            requirement: 生成するコードの説明
+            language: プログラミング言語（デフォルト: Python）
             
         Yields:
-            Generated code with explanation
+            説明付きの生成されたコード
         """
         try:
             yield f"💻 正在生成 **{language}** 代码：*{requirement}*\n\n"
             yield "---\n\n"
             
-            # Build prompt for code generation
+            # コード生成用のプロンプトを構築
             prompt = f"""为以下需求生成 {language} 代码：
 
 {requirement}
@@ -63,7 +63,7 @@ class CodeGenerationSkill:
             yield "---\n\n"
             yield "✅ **代码生成完成！**\n\n"
             
-            # Add helpful tips
+            # 役立つヒントを追加
             yield "### 💡 后续步骤\n\n"
             
             if language.lower() == "python":
@@ -94,13 +94,13 @@ class CodeGenerationSkill:
 
 def run(params: dict) -> Generator[str, None, None]:
     """
-    Entry point for the skill
+    スキルのエントリーポイント
     
     Args:
-        params: Dictionary with 'requirement' and optional 'language' keys
+        params: 'requirement'とオプションの'language'キーを含む辞書
         
     Yields:
-        Generated code
+        生成されたコード
     """
     requirement = params.get("requirement")
     if not requirement:
@@ -113,7 +113,7 @@ def run(params: dict) -> Generator[str, None, None]:
     yield from skill.execute(requirement, language)
 
 
-# For testing
+# テスト用
 if __name__ == "__main__":
     import sys
     
@@ -131,4 +131,3 @@ if __name__ == "__main__":
     for chunk in run({"requirement": test_requirement, "language": test_language}):
         print(chunk, end="", flush=True)
 
-# Made with Bob

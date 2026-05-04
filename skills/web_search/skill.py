@@ -1,5 +1,5 @@
 """
-Web Search Skill - Search the internet for latest information using Tavily API
+Web検索スキル - Tavily APIを使用してインターネットから最新情報を検索
 """
 import os
 import sys
@@ -12,7 +12,7 @@ import groq_client
 
 
 class WebSearchSkill:
-    """Search the web for real-time information"""
+    """リアルタイム情報をWeb検索"""
 
     def __init__(self):
         api_key = os.getenv("TAVILY_API_KEY")
@@ -21,7 +21,7 @@ class WebSearchSkill:
         self.client = TavilyClient(api_key=api_key)
 
     def translate_to_chinese(self, text: str) -> str:
-        """Translate English text to Simplified Chinese using Groq"""
+        """Groqを使用して英語テキストを簡体字中国語に翻訳"""
         try:
             response, _ = groq_client.chat_completion(
                 [
@@ -37,15 +37,15 @@ class WebSearchSkill:
             return text
     
     def filter_and_format_results(self, query: str, results: list, max_results: int) -> str:
-        """Use LLM to filter noise and format results uniformly"""
+        """LLMを使用してノイズをフィルタリングし、結果を統一的にフォーマット"""
         try:
-            # Prepare raw content for LLM, but truncate each result to avoid token limits
-            # llama-3.1-8b-instant has ~6000 token limit, roughly 800 chars per result is safe
-            MAX_CONTENT_PER_RESULT = 800  # Conservative limit per result
+            # LLM用に生コンテンツを準備するが、トークン制限を避けるため各結果を切り詰める
+            # llama-3.1-8b-instantは約6000トークン制限、結果あたり約800文字が安全
+            MAX_CONTENT_PER_RESULT = 800  # 結果あたりの保守的な制限
             raw_content = ""
             for idx, result in enumerate(results, 1):
                 title = result.get("title", "")
-                content = result.get("content", "")[:MAX_CONTENT_PER_RESULT]  # Truncate content
+                content = result.get("content", "")[:MAX_CONTENT_PER_RESULT]  # コンテンツを切り詰め
                 url = result.get("url", "")
                 raw_content += f"\n[结果{idx}]\n标题: {title}\n内容: {content}\nURL: {url}\n"
             
@@ -91,7 +91,7 @@ class WebSearchSkill:
             )
             return response.choices[0].message.content or ""
         except Exception as e:
-            # Fallback: return original results with basic formatting
+            # フォールバック: 基本的なフォーマットで元の結果を返す
             output = ""
             for idx, result in enumerate(results[:max_results], 1):
                 title = result.get("title", "无标题")
@@ -102,23 +102,23 @@ class WebSearchSkill:
     
     def execute(self, query: str, max_results: int = 3) -> Generator[str, None, None]:
         """
-        Execute web search and stream results
+        Web検索を実行して結果をストリーム
         
         Args:
-            query: Search query string
-            max_results: Maximum number of results to return (default: 3)
+            query: 検索クエリ文字列
+            max_results: 返す結果の最大数（デフォルト: 3）
             
         Yields:
-            Formatted search results with sources
+            ソース付きのフォーマットされた検索結果
         """
         try:
             yield f"🔍 正在搜索: **{query}**\n\n"
             
-            # Inject current date into query to bias toward recent results
+            # 最近の結果に偏らせるため、現在の日付をクエリに注入
             today = datetime.now()
             dated_query = f"{query} {today.strftime('%Y年%m月')}"
 
-            # Request more results from Tavily to have options for filtering
+            # フィルタリングのオプションを持つため、Tavilyからより多くの結果をリクエスト
             tavily_max = max(max_results * 2, 8)
             response = self.client.search(
                 query=dated_query,
@@ -131,7 +131,7 @@ class WebSearchSkill:
                 yield "❌ 未找到相关结果\n"
                 return
 
-            # Filter out results older than 30 days when published_date is available
+            # published_dateが利用可能な場合、30日より古い結果を除外
             cutoff = today - timedelta(days=30)
             results = []
             for r in response["results"]:
@@ -142,17 +142,17 @@ class WebSearchSkill:
                         if pub_dt >= cutoff:
                             results.append(r)
                     except ValueError:
-                        results.append(r)  # keep if date unparseable
+                        results.append(r)  # 日付が解析不可の場合は保持
                 else:
-                    results.append(r)  # keep if no date field
+                    results.append(r)  # 日付フィールドがない場合は保持
 
-            # Fall back to unfiltered list if filtering removed everything
+            # フィルタリングですべて削除された場合は、フィルタリングされていないリストにフォールバック
             if not results:
                 results = response["results"]
 
             yield f"✅ 找到 {len(results)} 条新闻，显示前 {max_results} 条\n\n"
             
-            # Use LLM to filter noise and format results uniformly
+            # LLMを使用してノイズをフィルタリングし、結果を統一的にフォーマット
             filtered_output = self.filter_and_format_results(query, results, max_results)
             
             yield "## 📰 搜索结果\n\n"
@@ -164,26 +164,26 @@ class WebSearchSkill:
 
 def run(params: dict) -> Generator[str, None, None]:
     """
-    Entry point for the skill
+    スキルのエントリーポイント
     
     Args:
-        params: Dictionary with 'query' and optional 'max_results' keys
+        params: 'query'とオプションの'max_results'キーを含む辞書
         
     Yields:
-        Search results
+        検索結果
     """
     query = params.get("query")
     if not query:
         yield "❌ Error: 'query' parameter is required\n"
         return
     
-    max_results = params.get("max_results", 3)  # Default to 3 results
+    max_results = params.get("max_results", 3)  # デフォルトは3件の結果
     
     skill = WebSearchSkill()
     yield from skill.execute(query, max_results)
 
 
-# For testing
+# テスト用
 if __name__ == "__main__":
     import sys
     
@@ -197,4 +197,3 @@ if __name__ == "__main__":
     for chunk in run({"query": test_query}):
         print(chunk, end="", flush=True)
 
-# Made with Bob

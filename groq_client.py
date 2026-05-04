@@ -1,50 +1,50 @@
 """
-Groq client with task-type-based model fallback chains.
+タスクタイプベースのモデルフォールバックチェーンを持つGroqクライアント
 
-TPD (tokens-per-day exhausted) → mark model exhausted, skip to next tier
-RPM (requests-per-minute exceeded) → wait 5 s, retry same model
-All tiers exhausted → raise RuntimeError with friendly message
+TPD（1日あたりのトークン上限）→ モデルを使用済みとしてマーク、次の層へスキップ
+RPM（1分あたりのリクエスト上限）→ 5秒待機、同じモデルで再試行
+全層使用済み → わかりやすいメッセージでRuntimeErrorを発生
 
-Degradation state is stored in st.session_state when available (Streamlit context),
-falling back to a module-level set for background threads.
+劣化状態はStreamlitコンテキストで利用可能な場合はst.session_stateに保存され、
+バックグラウンドスレッドではモジュールレベルのセットにフォールバック。
 
-Task types:
-- light: web_search filtering/formatting (fast, simple tasks)
-- standard: Router intent recognition (default)
-- heavy: stock_analysis AI analysis (complex reasoning)
+タスクタイプ:
+- light: web_search フィルタリング/フォーマット（高速、シンプルなタスク）
+- standard: ルーターの意図認識（デフォルト）
+- heavy: stock_analysis AI分析（複雑な推論）
 """
 import os
 import time
 from typing import Optional, List
 from groq import Groq
 
-# ── Task-type-based tier definitions ──────────────────────────────────────────
+# ── タスクタイプベースの層定義 ────────────────────────────────────────────────
 
-# Light tasks: web_search filtering/formatting
+# 軽量タスク: web_search フィルタリング/フォーマット
 LIGHT_CHAIN = [
     "llama-3.1-8b-instant",
     "openai/gpt-oss-20b",
     "qwen/qwen3-32b",
 ]
 
-# Standard tasks: Router intent recognition (default)
+# 標準タスク: ルーターの意図認識（デフォルト）
 STANDARD_CHAIN = [
     "meta-llama/llama-4-scout-17b-16e-instruct",
     "openai/gpt-oss-20b",
     "llama-3.3-70b-versatile",
 ]
 
-# Heavy tasks: stock_analysis AI analysis
+# 重量タスク: stock_analysis AI分析
 HEAVY_CHAIN = [
     "llama-3.3-70b-versatile",
     "openai/gpt-oss-20b",
     "openai/gpt-oss-120b",
 ]
 
-# Legacy default chain (for backward compatibility)
+# レガシーデフォルトチェーン（後方互換性のため）
 TIERS = STANDARD_CHAIN
 
-# ── Singleton client ──────────────────────────────────────────────────────────
+# ── シングルトンクライアント ──────────────────────────────────────────────────
 
 _client: Optional[Groq] = None
 
@@ -56,9 +56,9 @@ def _groq() -> Groq:
     return _client
 
 
-# ── Exhausted model tracking ──────────────────────────────────────────────────
+# ── 使用済みモデルの追跡 ──────────────────────────────────────────────────────
 
-_module_exhausted: set = set()  # fallback for non-Streamlit contexts
+_module_exhausted: set = set()  # 非Streamlitコンテキスト用のフォールバック
 
 
 def _exhausted() -> set:
@@ -81,10 +81,10 @@ def _mark_exhausted(model: str) -> None:
         _module_exhausted.add(model)
 
 
-# ── Public API ────────────────────────────────────────────────────────────────
+# ── パブリックAPI ─────────────────────────────────────────────────────────────
 
 def _get_chain_for_task(task_type: str) -> List[str]:
-    """Get the appropriate model chain for the given task type."""
+    """指定されたタスクタイプに適したモデルチェーンを取得"""
     if task_type == "light":
         return LIGHT_CHAIN
     elif task_type == "heavy":
@@ -95,10 +95,10 @@ def _get_chain_for_task(task_type: str) -> List[str]:
 
 def get_model(task_type: str = "standard") -> str:
     """
-    Return the highest-priority non-exhausted model for the given task type.
+    指定されたタスクタイプの最優先で使用済みでないモデルを返す
     
     Args:
-        task_type: "light", "standard", or "heavy"
+        task_type: "light"、"standard"、または"heavy"
     """
     ex = _exhausted()
     chain = _get_chain_for_task(task_type)
@@ -110,21 +110,21 @@ def get_model(task_type: str = "standard") -> str:
 
 def chat_completion(messages: list, stream: bool = False, task_type: str = "standard", **kwargs):
     """
-    Call Groq chat.completions.create with automatic tier fallback.
+    自動層フォールバックでGroq chat.completions.createを呼び出す
 
     Args:
-        messages: Chat messages
-        stream: Whether to stream the response
-        task_type: "light", "standard", or "heavy" - determines model chain
-        **kwargs: Additional arguments for chat.completions.create
+        messages: チャットメッセージ
+        stream: レスポンスをストリームするか
+        task_type: "light"、"standard"、または"heavy" - モデルチェーンを決定
+        **kwargs: chat.completions.createの追加引数
 
-    Do NOT pass `model` — it is managed internally based on task_type.
-    Returns (response, warning_str).
-      warning_str == "" when no fallback occurred.
-      warning_str == "⚠️ 模型降级: <old> → <new>" when a tier was skipped.
-    Raises RuntimeError if all tiers are exhausted.
+    `model`は渡さないこと — task_typeに基づいて内部で管理される。
+    (response, warning_str)を返す。
+      warning_str == "" フォールバックが発生しなかった場合
+      warning_str == "⚠️ 模型降级: <old> → <new>" 層がスキップされた場合
+    全層が使用済みの場合はRuntimeErrorを発生。
     """
-    kwargs.pop("model", None)  # ignore any accidental model kwarg
+    kwargs.pop("model", None)  # 誤ってmodelキーワード引数が渡された場合は無視
 
     client = _groq()
     chain = _get_chain_for_task(task_type)
@@ -136,7 +136,7 @@ def chat_completion(messages: list, stream: bool = False, task_type: str = "stan
     warning = ""
 
     for model in candidates:
-        while True:  # RPM retry loop for this tier
+        while True:  # この層のRPM再試行ループ
             try:
                 resp = client.chat.completions.create(
                     model=model,
@@ -153,15 +153,15 @@ def chat_completion(messages: list, stream: bool = False, task_type: str = "stan
                     raise
                 if _is_rpm(err):
                     time.sleep(5)
-                    continue  # retry same model after wait
-                else:  # TPD or unknown 429
+                    continue  # 待機後に同じモデルで再試行
+                else:  # TPDまたは不明な429
                     _mark_exhausted(model)
-                    break  # move to next tier
+                    break  # 次の層へ移動
 
     raise RuntimeError("❌ 所有模型均已达到每日限额，请明天再试。")
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# ── ヘルパー ──────────────────────────────────────────────────────────────────
 
 def _is_rpm(err: str) -> bool:
     low = err.lower()

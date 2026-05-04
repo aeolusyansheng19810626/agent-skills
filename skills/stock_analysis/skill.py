@@ -1,5 +1,5 @@
 """
-Stock Analysis Skill - Analyze stock data using yfinance and Groq
+株式分析スキル - yfinanceとGroqを使用して株式データを分析
 """
 import os
 import sys
@@ -13,32 +13,32 @@ import groq_client
 
 
 class StockAnalysisSkill:
-    """Analyze stock performance with technical and news analysis"""
+    """テクニカル分析とニュース分析で株式パフォーマンスを分析"""
 
     def __init__(self):
         pass
     
     def execute(self, ticker: str, context: str = "") -> Generator[str, None, None]:
         """
-        Execute stock analysis and stream results.
+        株式分析を実行して結果をストリーム
 
         Args:
-            ticker: Stock ticker symbol (e.g., AAPL, TSLA)
-            context: Optional prior output from an upstream skill (e.g. web_search)
-                     injected by the pipeline executor via params["context"].
-                     When provided, it is appended to the LLM analysis prompt so
-                     the model can incorporate external news without re-fetching.
+            ticker: 株式ティッカーシンボル（例: AAPL、TSLA）
+            context: 上流スキル（例: web_search）からのオプションの事前出力
+                     パイプライン実行エンジンによってparams["context"]経由で注入される。
+                     提供された場合、LLM分析プロンプトに追加され、
+                     モデルが再取得せずに外部ニュースを組み込める。
 
         Yields:
-            Formatted analysis results
+            フォーマットされた分析結果
         """
         try:
             yield f"📊 正在分析股票: **{ticker.upper()}**\n\n"
             
-            # Fetch stock data
+            # 株式データを取得
             stock = yf.Ticker(ticker)
             
-            # Get basic info
+            # 基本情報を取得
             info = stock.info
             yield "## 📈 基本信息\n\n"
             
@@ -51,7 +51,7 @@ class StockAnalysisSkill:
             
             market_cap = info.get('marketCap')
             if market_cap:
-                # Format market cap
+                # 時価総額をフォーマット
                 if market_cap >= 1_000_000_000_000:  # >= 1T
                     formatted_cap = f"${market_cap / 1_000_000_000_000:.3f} T"
                 elif market_cap >= 1_000_000_000:  # >= 1B
@@ -64,12 +64,12 @@ class StockAnalysisSkill:
             if pe_ratio:
                 yield f"**市盈率:** {pe_ratio:.2f}\n\n"
             
-            # Get historical data (last 30 days)
+            # 過去データを取得（直近30日）
             end_date = datetime.now()
             start_date = end_date - timedelta(days=30)
             hist = stock.history(start=start_date, end=end_date)
             
-            change = 0.0  # Initialize change variable
+            change = 0.0  # 変動変数を初期化
             if not hist.empty:
                 yield "## 📉 近期表现（30天）\n\n"
                 
@@ -82,7 +82,7 @@ class StockAnalysisSkill:
                 yield f"**最低:** ${hist['Low'].min():.2f}\n\n"
                 yield f"**平均成交量:** {hist['Volume'].mean():,.0f}\n\n"
             
-            # Get news — skip when upstream context already contains news
+            # ニュースを取得 — 上流コンテキストに既にニュースが含まれている場合はスキップ
             if context:
                 yield "## 📰 背景资讯\n\n"
                 yield "*（已从上一步骤获取，见上方搜索结果）*\n\n"
@@ -110,11 +110,11 @@ class StockAnalysisSkill:
                 except:
                     pass
             
-            # Generate AI analysis
+            # AI分析を生成
             yield "## 🤖 AI 分析\n\n"
             yield "正在生成分析...\n\n"
             
-            # Format values safely
+            # 値を安全にフォーマット
             price_str = f"${current_price:.2f}" if current_price else "N/A"
             cap_str = f"${market_cap:,.0f}" if market_cap else "N/A"
             pe_str = f"{pe_ratio:.2f}" if pe_ratio else "N/A"
@@ -167,15 +167,15 @@ class StockAnalysisSkill:
 
 def run(params: dict) -> Generator[str, None, None]:
     """
-    Entry point for the skill.
+    スキルのエントリーポイント
 
     Args:
-        params: dict with 'ticker' key and optional 'context' key.
-                'context' is injected automatically by pipeline.py when this
-                skill runs after an upstream skill.
+        params: 'ticker'キーとオプションの'context'キーを含む辞書
+                'context'は、このスキルが上流スキルの後に実行される場合、
+                pipeline.pyによって自動的に注入される。
 
     Yields:
-        Stock analysis results
+        株式分析結果
     """
     ticker = params.get("ticker")
     if not ticker:
@@ -187,7 +187,7 @@ def run(params: dict) -> Generator[str, None, None]:
     yield from skill.execute(ticker, context)
 
 
-# For testing
+# テスト用
 if __name__ == "__main__":
     import sys
     
@@ -201,4 +201,3 @@ if __name__ == "__main__":
     for chunk in run({"ticker": test_ticker}):
         print(chunk, end="", flush=True)
 
-# Made with Bob

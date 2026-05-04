@@ -1,5 +1,5 @@
 """
-Router Agent - Uses LLM to determine which skill to call based on user input
+ルーターエージェント - LLMを使用してユーザー入力に基づいて呼び出すスキルを判断
 """
 import os
 import json
@@ -10,10 +10,10 @@ import groq_client
 
 
 def _sanitize_reasoning(text: str, result: dict) -> str:
-    """Return a readable Chinese reasoning string, falling back to an auto-generated one."""
+    """読みやすい推論文字列を返す。文字化けの場合は自動生成にフォールバック"""
     if not isinstance(text, str) or not text.strip():
         return _auto_reasoning(result)
-    # Check ratio of CJK + ASCII printable chars; reject if too low (garbled text)
+    # CJK + ASCII印字可能文字の比率をチェック。低すぎる場合は文字化けとして拒否
     total = len(text)
     readable = sum(
         1 for ch in text
@@ -40,7 +40,7 @@ def _auto_reasoning(result: dict) -> str:
 
 
 class RouterAgent:
-    """Routes user queries to appropriate skills using LLM"""
+    """LLMを使用してユーザークエリを適切なスキルにルーティング"""
     
     def __init__(self, model: str = None):
         self.skill_loader = get_skill_loader()
@@ -54,7 +54,7 @@ class RouterAgent:
             return "（所有模型已耗尽）"
     
     def _build_system_prompt(self) -> str:
-        """Build system prompt with all skill descriptions"""
+        """全スキルの説明を含むシステムプロンプトを構築"""
         skills_summary = self.skill_loader.get_skills_summary()
         
         prompt = f"""你是一个 Router Agent，根据用户输入判断应该调用哪个技能。
@@ -154,13 +154,13 @@ class RouterAgent:
     
     def route(self, user_query: str) -> Dict[str, Any]:
         """
-        Route user query to appropriate skill
+        ユーザークエリを適切なスキルにルーティング
         
         Args:
-            user_query: User's input query
+            user_query: ユーザーの入力クエリ
             
         Returns:
-            Dictionary with skill, params, and reasoning
+            skill、params、reasoningを含む辞書
         """
         try:
             messages = [
@@ -186,14 +186,14 @@ class RouterAgent:
                 raise ValueError("LLM returned empty response")
             result = json.loads(content)
             
-            # Validate result structure
+            # 結果の構造を検証
             if "reasoning" not in result:
                 result["reasoning"] = "No reasoning provided"
             else:
                 result["reasoning"] = _sanitize_reasoning(result["reasoning"], result)
 
             if "plan" in result:
-                # Pipeline format: validate each step (serial skill or parallel group)
+                # パイプライン形式：各ステップを検証（直列スキルまたは並列グループ）
                 valid_names = self.skill_loader.get_skill_names()
                 for step in result["plan"]:
                     if "parallel" in step:
@@ -212,7 +212,7 @@ class RouterAgent:
                     else:
                         raise ValueError("Plan step must have 'skill' or 'parallel' field")
             else:
-                # Single skill format
+                # 単一スキル形式
                 if "skill" not in result:
                     raise ValueError("Response missing 'skill' field")
                 if "params" not in result:
@@ -239,17 +239,17 @@ class RouterAgent:
     
     def route_with_fallback(self, user_query: str) -> Dict[str, Any]:
         """
-        Route with fallback to direct response if no skill matches
+        スキルがマッチしない場合は直接応答にフォールバック
         
         Args:
-            user_query: User's input query
+            user_query: ユーザーの入力クエリ
             
         Returns:
-            Dictionary with skill, params, reasoning, and optional direct_response
+            skill、params、reasoning、オプションのdirect_responseを含む辞書
         """
         result = self.route(user_query)
         
-        # If no skill matches, generate a direct response
+        # スキルがマッチしない場合、直接応答を生成
         if result["skill"] == "none":
             try:
                 response, warning = groq_client.chat_completion(
@@ -275,7 +275,7 @@ class RouterAgent:
 
 
 def test_router():
-    """Test the router with sample queries"""
+    """サンプルクエリでルーターをテスト"""
     router = RouterAgent()
     
     test_queries = [
@@ -303,4 +303,3 @@ def test_router():
 if __name__ == "__main__":
     test_router()
 
-# Made with Bob

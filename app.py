@@ -854,7 +854,7 @@ def initialize_session_state():
     if "document_store" not in st.session_state:
         st.session_state.document_store = DocumentStore()
     if "lang" not in st.session_state:
-        st.session_state.lang = "zh"
+        st.session_state.lang = "en"
     if "uploader_key" not in st.session_state:
         st.session_state.uploader_key = 0
 

@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s http://localhost:8501)",
+      "Bash(python -m py_compile app.py)",
+      "Bash(streamlit run *)",
+      "Bash(powershell -Command \"cd 'c:\\\\Users\\\\ShengYan\\\\Projects\\\\agent-skills' && streamlit run app.py --logger.level=error 2>&1 | Select-String -Pattern 'http|error|Error|Exception' -Wait\")",
+      "Bash(pkill -f \"streamlit run\")"
+    ]
+  }
+}

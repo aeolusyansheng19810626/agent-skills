@@ -1,5 +1,5 @@
 """
-Document Q&A Skill - Answer questions from uploaded documents using in-memory storage
+ドキュメントQ&Aスキル - インメモリストレージを使用してアップロードされたドキュメントから質問に回答
 """
 import os
 import sys
@@ -11,21 +11,21 @@ import groq_client
 
 
 class DocumentStore:
-    """Simple in-memory document storage"""
+    """シンプルなインメモリドキュメントストレージ"""
     
     def __init__(self):
         self.documents: List[Dict[str, str]] = []
     
     def add_document(self, content: str, filename: str = "document"):
-        """Add a document to the store (prevents duplicates)"""
+        """ストアにドキュメントを追加（重複を防止）"""
         doc_id = hashlib.md5(content.encode()).hexdigest()[:8]
         
-        # Check if document already exists (by ID)
+        # ドキュメントが既に存在するかチェック（IDで）
         for doc in self.documents:
             if doc["id"] == doc_id:
-                return doc_id  # Already exists, don't add again
+                return doc_id  # 既に存在、再度追加しない
         
-        # Add new document
+        # 新しいドキュメントを追加
         self.documents.append({
             "id": doc_id,
             "filename": filename,
@@ -34,25 +34,25 @@ class DocumentStore:
         return doc_id
     
     def search(self, query: str, top_k: int = 3) -> List[Dict[str, str]]:
-        """Improved search with substring matching for better Chinese support"""
+        """中国語サポート向上のため部分文字列マッチングを使用した改善された検索"""
         query_lower = query.lower()
         
-        # Score documents by multiple criteria
+        # 複数の基準でドキュメントをスコアリング
         scored_docs = []
         for doc in self.documents:
             content_lower = doc["content"].lower()
             score = 0
             
-            # 1. Direct substring match (highest priority)
+            # 1. 直接部分文字列マッチ（最優先）
             if query_lower in content_lower:
                 score += 100
             
-            # 2. Individual character matching (for Chinese)
+            # 2. 個別文字マッチング（中国語用）
             for char in query_lower:
                 if char in content_lower and char.strip():
                     score += 1
             
-            # 3. Word-based matching (for English/mixed content)
+            # 3. 単語ベースマッチング（英語/混合コンテンツ用）
             query_words = set(query_lower.split())
             content_words = set(content_lower.split())
             word_overlap = len(query_words & content_words)
@@ -61,53 +61,53 @@ class DocumentStore:
             if score > 0:
                 scored_docs.append((score, doc))
         
-        # Sort by score and return top_k
+        # スコアでソートしてtop_kを返す
         scored_docs.sort(reverse=True, key=lambda x: x[0])
         return [doc for _, doc in scored_docs[:top_k]]
     
     def get_all_documents(self) -> List[Dict[str, str]]:
-        """Get all documents"""
+        """すべてのドキュメントを取得"""
         return self.documents
     
     def remove_document(self, doc_id: str):
-        """Remove a single document by ID"""
+        """IDで単一のドキュメントを削除"""
         self.documents = [d for d in self.documents if d["id"] != doc_id]
 
     def clear(self):
-        """Clear all documents"""
+        """すべてのドキュメントをクリア"""
         self.documents.clear()
 
 
-# Global document store - will be initialized in get_document_store()
+# グローバルドキュメントストア - get_document_store()で初期化される
 _document_store = None
 
 
 class DocumentQASkill:
-    """Answer questions from documents using RAG approach"""
+    """RAGアプローチを使用してドキュメントから質問に回答"""
     
     def __init__(self, document_store: Optional[DocumentStore] = None):
         self.store = document_store if document_store is not None else get_document_store()
     
     def execute(self, query: str) -> Generator[str, None, None]:
         """
-        Execute document Q&A and stream results
+        ドキュメントQ&Aを実行して結果をストリーム
         
         Args:
-            query: User's question
+            query: ユーザーの質問
             
         Yields:
-            Answer with source citations
+            ソース引用付きの回答
         """
         try:
             yield f"📚 正在搜索文档：**{query}**\n\n"
             
-            # Check if documents exist
+            # ドキュメントが存在するかチェック
             if not self.store.documents:
                 yield "❌ **知识库中未找到文档。**\n\n"
                 yield "请先使用文档管理界面上传文档。\n"
                 return
             
-            # Search for relevant documents
+            # 関連ドキュメントを検索
             relevant_docs = self.store.search(query, top_k=3)
             
             if not relevant_docs:
@@ -118,14 +118,14 @@ class DocumentQASkill:
             
             yield f"✅ 找到 {len(relevant_docs)} 个相关文档\n\n"
             
-            # Build context from relevant documents
+            # 関連ドキュメントからコンテキストを構築
             context_parts = []
             for idx, doc in enumerate(relevant_docs, 1):
                 context_parts.append(f"[Document {idx}: {doc['filename']}]\n{doc['content']}\n")
             
             context = "\n---\n".join(context_parts)
             
-            # Generate answer using LLM
+            # LLMを使用して回答を生成
             yield "## 💡 回答\n\n"
             
             prompt = f"""根据以下文档回答用户的问题。如果文档中没有答案，请明确说明。
@@ -153,7 +153,7 @@ class DocumentQASkill:
             
             yield "\n\n"
             
-            # Show sources
+            # ソースを表示
             yield "## 📄 来源\n\n"
             for idx, doc in enumerate(relevant_docs, 1):
                 yield f"{idx}. **{doc['filename']}** (ID: {doc['id']})\n"
@@ -166,43 +166,43 @@ class DocumentQASkill:
 
 def run(params: dict) -> Generator[str, None, None]:
     """
-    Entry point for the skill
+    スキルのエントリーポイント
     
     Args:
-        params: Dictionary with 'query' key and optional 'document_store'
+        params: 'query'キーとオプションの'document_store'を含む辞書
         
     Yields:
-        Q&A results
+        Q&A結果
     """
     query = params.get("query")
     if not query:
         yield "❌ 错误：缺少 'query' 参数\n"
         return
     
-    # Get document store from params (passed from app.py)
+    # paramsからドキュメントストアを取得（app.pyから渡される）
     document_store = params.get("document_store")
     skill = DocumentQASkill(document_store=document_store)
     yield from skill.execute(query)
 
 
 def add_document(content: str, filename: str = "document") -> str:
-    """Helper function to add documents to the store"""
+    """ストアにドキュメントを追加するヘルパー関数"""
     return get_document_store().add_document(content, filename)
 
 
 def get_document_store() -> DocumentStore:
-    """Get the global document store (singleton pattern)"""
+    """グローバルドキュメントストアを取得（シングルトンパターン）"""
     global _document_store
     if _document_store is None:
         _document_store = DocumentStore()
     return _document_store
 
 
-# For testing
+# テスト用
 if __name__ == "__main__":
     import sys
     
-    # Add sample documents
+    # サンプルドキュメントを追加
     sample_doc1 = """
     Company Refund Policy
     
@@ -234,4 +234,3 @@ if __name__ == "__main__":
     for chunk in run({"query": test_query}):
         print(chunk, end="", flush=True)
 
-# Made with Bob

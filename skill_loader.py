@@ -1,5 +1,5 @@
 """
-Skill Loader - Automatically scans and registers skills from the skills/ directory
+スキルローダー - skills/ディレクトリからスキルを自動スキャンして登録
 """
 import os
 from pathlib import Path
@@ -8,7 +8,7 @@ import re
 
 
 class SkillLoader:
-    """Loads and manages skill definitions from skill.md files"""
+    """skill.mdファイルからスキル定義を読み込んで管理"""
     
     def __init__(self, skills_dir: str = "skills"):
         self.skills_dir = Path(skills_dir)
@@ -16,7 +16,7 @@ class SkillLoader:
         self._load_skills()
     
     def _load_skills(self):
-        """Scan skills directory and load all skill.md files"""
+        """skillsディレクトリをスキャンしてすべてのskill.mdファイルを読み込む"""
         if not self.skills_dir.exists():
             raise FileNotFoundError(f"Skills directory not found: {self.skills_dir}")
         
@@ -32,7 +32,7 @@ class SkillLoader:
                     print(f"[OK] Loaded skill: {skill_name}")
     
     def _parse_skill_md(self, md_path: Path) -> Dict:
-        """Parse skill.md file and extract metadata"""
+        """skill.mdファイルを解析してメタデータを抽出"""
         with open(md_path, 'r', encoding='utf-8') as f:
             content = f.read()
         
@@ -45,12 +45,12 @@ class SkillLoader:
             'full_content': content
         }
         
-        # Extract description
+        # 説明を抽出
         desc_match = re.search(r'## 描述\s*\n(.*?)(?=\n##|\Z)', content, re.DOTALL)
         if desc_match:
             skill_data['description'] = desc_match.group(1).strip()
         
-        # Extract trigger conditions
+        # トリガー条件を抽出
         trigger_match = re.search(r'## 触发条件\s*\n(.*?)(?=\n##|\Z)', content, re.DOTALL)
         if trigger_match:
             triggers = trigger_match.group(1).strip()
@@ -60,7 +60,7 @@ class SkillLoader:
                 if line.strip().startswith('-')
             ]
         
-        # Extract non-trigger conditions
+        # 非トリガー条件を抽出
         non_trigger_match = re.search(r'## 不触发条件\s*\n(.*?)(?=\n##|\Z)', content, re.DOTALL)
         if non_trigger_match:
             non_triggers = non_trigger_match.group(1).strip()
@@ -70,7 +70,7 @@ class SkillLoader:
                 if line.strip().startswith('-')
             ]
         
-        # Extract parameters
+        # パラメータを抽出
         params_match = re.search(r'## 参数\s*\n(.*?)(?=\n##|\Z)', content, re.DOTALL)
         if params_match:
             params = params_match.group(1).strip()
@@ -80,7 +80,7 @@ class SkillLoader:
                 if line.strip().startswith('-')
             ]
         
-        # Extract returns
+        # 戻り値を抽出
         returns_match = re.search(r'## 返回\s*\n(.*?)(?=\n##|\Z)', content, re.DOTALL)
         if returns_match:
             skill_data['returns'] = returns_match.group(1).strip()
@@ -88,19 +88,19 @@ class SkillLoader:
         return skill_data
     
     def get_skill(self, skill_name: str) -> Optional[Dict]:
-        """Get skill metadata by name"""
+        """名前でスキルメタデータを取得"""
         return self.skills.get(skill_name)
     
     def get_all_skills(self) -> Dict[str, Dict]:
-        """Get all loaded skills"""
+        """読み込まれたすべてのスキルを取得"""
         return self.skills
     
     def get_skill_names(self) -> List[str]:
-        """Get list of all skill names"""
+        """すべてのスキル名のリストを取得"""
         return list(self.skills.keys())
     
     def get_skills_summary(self) -> str:
-        """Generate a summary of all skills for router prompt"""
+        """ルータープロンプト用にすべてのスキルのサマリーを生成"""
         summary_parts = []
         
         for skill_name, skill_data in self.skills.items():
@@ -124,7 +124,7 @@ class SkillLoader:
         return "\n\n---\n\n".join(summary_parts)
     
     def import_skill_module(self, skill_name: str):
-        """Dynamically import skill.py module"""
+        """skill.pyモジュールを動的にインポート"""
         if skill_name not in self.skills:
             raise ValueError(f"Skill not found: {skill_name}")
         
@@ -134,7 +134,7 @@ class SkillLoader:
         if not skill_py.exists():
             raise FileNotFoundError(f"skill.py not found for {skill_name}")
         
-        # Dynamic import
+        # 動的インポート
         import importlib.util
         spec = importlib.util.spec_from_file_location(f"skills.{skill_name}.skill", skill_py)
         if spec is None or spec.loader is None:
@@ -145,11 +145,11 @@ class SkillLoader:
         return module
 
 
-# Singleton instance
+# シングルトンインスタンス
 _loader_instance = None
 
 def get_skill_loader() -> SkillLoader:
-    """Get or create skill loader singleton"""
+    """スキルローダーシングルトンを取得または作成"""
     global _loader_instance
     if _loader_instance is None:
         _loader_instance = SkillLoader()
@@ -157,7 +157,7 @@ def get_skill_loader() -> SkillLoader:
 
 
 if __name__ == "__main__":
-    # Test the loader
+    # ローダーをテスト
     loader = SkillLoader()
     print(f"\n📦 Loaded {len(loader.skills)} skills:")
     for name in loader.get_skill_names():
@@ -168,4 +168,3 @@ if __name__ == "__main__":
     print("="*80)
     print(loader.get_skills_summary())
 
-# Made with Bob

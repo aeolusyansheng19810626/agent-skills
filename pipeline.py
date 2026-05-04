@@ -1,34 +1,34 @@
 """
-Pipeline executor — serial, parallel, nested, and dynamic plan execution.
+パイプライン実行エンジン - 直列、並列、ネスト、動的プラン実行
 
-Step types inside a plan:
-  {"skill": "name", "params": {...}}              — serial single skill
-  {"parallel": [{"skill": "name", "params": {...}}, ...]}  — concurrent group
-  {"plan": [...]}                                 — nested sub-plan (recursive)
+プラン内のステップタイプ:
+  {"skill": "name", "params": {...}}              — 直列単一スキル
+  {"parallel": [{"skill": "name", "params": {...}}, ...]}  — 並列グループ
+  {"plan": [...]}                                 — ネストされたサブプラン（再帰）
 
-Context propagation:
-  Each step's full text output is concatenated and passed as params["context"]
-  to the next step (or parallel group), enabling downstream skills to build on
-  prior results.
+コンテキストの伝播:
+  各ステップの完全なテキスト出力が連結され、params["context"]として
+  次のステップ（または並列グループ）に渡される。これにより下流のスキルが
+  前の結果を基に処理を行える。
 
-Dynamic extension:
-  After the last step of a plan, the Evaluator LLM judges if output is sufficient.
-  If it recommends an additional skill, that skill is appended and executed once.
-  Capped at _MAX_DYNAMIC_EXTENSIONS per plan level to prevent infinite loops.
+動的拡張:
+  プランの最後のステップ後、評価エンジンのLLMが出力が十分かを判断。
+  追加のスキルを推奨する場合、そのスキルが追加され一度だけ実行される。
+  無限ループを防ぐため、プランレベルごとに_MAX_DYNAMIC_EXTENSIONSで制限。
 
-Nesting:
-  Pipeline recursively calls itself for {"plan": [...]} steps.
-  Depth is tracked and capped at max_depth (default 3).
+ネスト:
+  パイプラインは{"plan": [...]}ステップに対して自身を再帰的に呼び出す。
+  深度は追跡され、max_depth（デフォルト3）で制限される。
 """
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any, Generator, List
 
 from skill_loader import SkillLoader
 
-_MAX_DYNAMIC_EXTENSIONS = 1  # per plan level
+_MAX_DYNAMIC_EXTENSIONS = 1  # プランレベルごと
 
 
-# ── Public entry point ────────────────────────────────────────────────────────
+# ── パブリックエントリーポイント ──────────────────────────────────────────────
 
 def execute(
     router_result: Dict[str, Any],
@@ -37,13 +37,13 @@ def execute(
     max_depth: int = 3,
 ) -> Generator[str, None, None]:
     """
-    Unified entry point. Handles single skill or plan (serial/parallel/nested/dynamic).
+    統一エントリーポイント。単一スキルまたはプラン（直列/並列/ネスト/動的）を処理
 
     Args:
-        router_result: output of RouterAgent.route()
-        skill_loader:  SkillLoader instance
-        user_query:    original user text, used by Evaluator for dynamic extension
-        max_depth:     maximum nesting depth for recursive sub-plans
+        router_result: RouterAgent.route()の出力
+        skill_loader:  SkillLoaderインスタンス
+        user_query:    元のユーザーテキスト、動的拡張のために評価エンジンで使用
+        max_depth:     再帰的サブプランの最大ネスト深度
     """
     if "plan" in router_result:
         yield from _execute_plan(
@@ -55,7 +55,7 @@ def execute(
         if not skill_name or skill_name == "none":
             return
         if user_query:
-            # Route through _execute_plan so Evaluator can run after the single step
+            # 単一ステップ後に評価エンジンが実行できるよう_execute_planを経由
             yield from _execute_plan(
                 [{"skill": skill_name, "params": params}],
                 skill_loader, user_query, max_depth, depth=0,
@@ -64,7 +64,7 @@ def execute(
             yield from _execute_single(router_result, skill_loader)
 
 
-# ── Internal helpers ──────────────────────────────────────────────────────────
+# ── 内部ヘルパー ──────────────────────────────────────────────────────────────
 
 def _execute_single(
     router_result: Dict[str, Any], skill_loader: SkillLoader
@@ -87,13 +87,13 @@ def _execute_plan(
         yield f"⚠️ 已达最大嵌套深度（{max_depth}），停止执行\n"
         return
 
-    # Mutable copy: evaluator may append one extra step at the end
+    # 可変コピー：評価エンジンが最後に1つのステップを追加する可能性がある
     steps = list(plan)
     context = ""
     dynamic_extensions = 0
-    idx = 0  # pointer into steps (len(steps) may grow by 1)
+    idx = 0  # stepsへのポインタ（len(steps)は1増える可能性がある）
     
-    # Track execution history: list of (skill_name, query) tuples
+    # 実行履歴を追跡：(skill_name, query)タプルのリスト
     execution_history = []
 
     while idx < len(steps):
@@ -102,7 +102,7 @@ def _execute_plan(
         total = len(steps)
         is_last = idx >= total
 
-        # ── parallel group ────────────────────────────────────────
+        # ── 並列グループ ──────────────────────────────────────────
         if "parallel" in step:
             sub_steps = step["parallel"]
             yield f"### ⚡ 并行执行（共 {len(sub_steps)} 个技能）\n\n"
@@ -114,7 +114,7 @@ def _execute_plan(
                 merged += f"[{skill_name}]\n{output}\n\n"
             context = merged
 
-        # ── nested sub-plan ───────────────────────────────────────
+        # ── ネストされたサブプラン ────────────────────────────────
         elif "plan" in step:
             yield f"### 🔄 子计划（嵌套深度 {depth + 1}）\n\n"
             sub_output = ""
@@ -125,11 +125,11 @@ def _execute_plan(
                 sub_output += chunk
             context = sub_output
 
-        # ── single serial skill ───────────────────────────────────
+        # ── 単一直列スキル ────────────────────────────────────────
         elif "skill" in step:
             skill_name = step["skill"]
             params = dict(step.get("params", {}))
-            # Use idx (1-based after increment) for display; recalculate total
+            # 表示にはidx（インクリメント後の1ベース）を使用。totalを再計算
             yield f"### 步骤 {idx}/{total}：{skill_name}\n\n"
             if context:
                 params["context"] = context
@@ -139,15 +139,15 @@ def _execute_plan(
                 step_output += chunk
             context = step_output
             
-            # Record execution history (skill_name, query)
+            # 実行履歴を記録（skill_name, query）
             query = params.get("query", "")
             execution_history.append((skill_name, query))
 
-        # ── separator between steps ───────────────────────────────
+        # ── ステップ間の区切り ────────────────────────────────────
         if not is_last:
             yield "\n---\n\n"
 
-        # ── dynamic evaluation at the natural end of the plan ─────
+        # ── プランの自然な終了時の動的評価 ────────────────────────
         if is_last and user_query and dynamic_extensions < _MAX_DYNAMIC_EXTENSIONS:
             from evaluator import Evaluator
             eval_result = Evaluator().evaluate(
@@ -162,7 +162,7 @@ def _execute_plan(
                     yield f"\x00DYNAMIC_SKILL:{next_skill}\x00"
                     yield f"💡 *评估后追加技能: {next_skill}*\n\n"
                     steps.append({"skill": next_skill, "params": next_params})
-                    # Record the dynamically added skill
+                    # 動的に追加されたスキルを記録
                     query = next_params.get("query", "")
                     execution_history.append((next_skill, query))
 
@@ -173,8 +173,8 @@ def _execute_parallel(
     skill_loader: SkillLoader,
 ) -> Dict[str, str]:
     """
-    Run all steps concurrently via ThreadPoolExecutor.
-    Returns {skill_name: full_output} dict; order follows completion time.
+    ThreadPoolExecutorを使用してすべてのステップを並行実行。
+    {skill_name: full_output}辞書を返す。順序は完了時刻に従う。
     """
     results: Dict[str, str] = {}
 

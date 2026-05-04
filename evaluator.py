@@ -1,9 +1,9 @@
 """
-Evaluator - lightweight LLM judge that decides whether to extend the pipeline.
+評価エンジン - パイプラインを拡張するかを判断する軽量LLMジャッジ
 
-Called at the natural end of a plan. Returns:
-  {"action": "continue"}                                  — output is sufficient
-  {"action": "next", "skill": "...", "params": {...}}     — append one more skill
+プランの自然な終了時に呼び出される。戻り値:
+  {"action": "continue"}                                  — 出力は十分
+  {"action": "next", "skill": "...", "params": {...}}     — さらに1つのスキルを追加
 """
 import os
 import json
@@ -12,7 +12,7 @@ from groq import Groq
 
 
 class Evaluator:
-    # Use a fast/cheap model for this lightweight judgment task
+    # この軽量な判断タスクには高速で安価なモデルを使用
     MODEL = "llama-3.1-8b-instant"
 
     def __init__(self):
@@ -29,16 +29,16 @@ class Evaluator:
         execution_history: Optional[List[Tuple[str, str]]] = None,
     ) -> dict:
         """
-        Judge if accumulated_output sufficiently answers user_query.
+        accumulated_outputがuser_queryに十分に答えているかを判断
 
         Args:
-            user_query: Original user request
-            accumulated_output: Current accumulated output
-            available_skills: List of available skill names
-            execution_history: List of (skill_name, query) tuples already executed
+            user_query: 元のユーザーリクエスト
+            accumulated_output: 現在の累積出力
+            available_skills: 利用可能なスキル名のリスト
+            execution_history: すでに実行された(skill_name, query)タプルのリスト
 
-        Fails safe: any exception returns {"action": "continue"} so the
-        pipeline never stalls due to evaluator errors.
+        フェイルセーフ: 例外が発生した場合は{"action": "continue"}を返すため、
+        評価エンジンのエラーによってパイプラインが停止することはない。
         """
         if not user_query:
             return {"action": "continue"}
@@ -46,7 +46,7 @@ class Evaluator:
         snippet = accumulated_output[-600:] if accumulated_output else "（无内容）"
         skills_str = ", ".join(available_skills)
         
-        # Format execution history
+        # 実行履歴をフォーマット
         if execution_history:
             history_str = "\n已执行的技能历史：\n"
             for skill_name, query in execution_history:

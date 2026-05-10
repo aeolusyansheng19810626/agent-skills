@@ -978,19 +978,32 @@ def display_sidebar():
         """, unsafe_allow_html=True)
 
 
-def _inject_document_store(routing_result: dict):
-    """Inject session document_store into params for document_qa steps."""
+def _inject_context(routing_result: dict):
+    """注入全局上下文：document_store 和当前选择的语言 ui_lang"""
+    lang = st.session_state.get("lang", "zh")
+    doc_store = st.session_state.get("document_store")
+    
+    def _apply(params):
+        if not isinstance(params, dict): return
+        params["document_store"] = doc_store
+        params["ui_lang"] = lang # 注入当前 UI 语言
+    
     if "plan" in routing_result:
         for step in routing_result["plan"]:
-            if step.get("skill") == "document_qa":
-                step["params"]["document_store"] = st.session_state.document_store
-    elif routing_result.get("skill") == "document_qa":
-        routing_result["params"]["document_store"] = st.session_state.document_store
+            if "parallel" in step:
+                for s in step["parallel"]:
+                    _apply(s.get("params", {}))
+            else:
+                _apply(step.get("params", {}))
+    elif "skill" in routing_result:
+        if "params" not in routing_result: 
+            routing_result["params"] = {}
+        _apply(routing_result["params"])
 
 
 def execute_skill(routing_result: dict, user_query: str = ""):
     """执行路由结果（单技能或 pipeline），流式输出结果"""
-    _inject_document_store(routing_result)
+    _inject_context(routing_result)
     yield from pipeline.execute(routing_result, st.session_state.skill_loader, user_query=user_query)
 
 

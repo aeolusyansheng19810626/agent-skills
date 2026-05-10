@@ -18,186 +18,146 @@ class StockAnalysisSkill:
     def __init__(self):
         pass
     
-    def execute(self, ticker: str, context: str = "") -> Generator[str, None, None]:
+    def execute(self, ticker: str, context: str = "", ui_lang: str = "zh") -> Generator[str, None, None]:
         """
         株式分析を実行して結果をストリーム
-
-        Args:
-            ticker: 株式ティッカーシンボル（例: AAPL、TSLA）
-            context: 上流スキル（例: web_search）からのオプションの事前出力
-                     パイプライン実行エンジンによってparams["context"]経由で注入される。
-                     提供された場合、LLM分析プロンプトに追加され、
-                     モデルが再取得せずに外部ニュースを組み込める。
-
-        Yields:
-            フォーマットされた分析結果
         """
         try:
-            yield f"📊 正在分析股票: **{ticker.upper()}**\n\n"
+            lang_names = {"zh": "简体中文", "ja": "日本語", "en": "English"}
+            target_lang = lang_names.get(ui_lang, "简体中文")
+            
+            status_map = {
+                "zh": f"📊 正在分析股票: **{ticker.upper()}**",
+                "ja": f"📊 株式を分析しています: **{ticker.upper()}**",
+                "en": f"📊 Analyzing stock: **{ticker.upper()}**"
+            }
+            yield status_map.get(ui_lang, status_map["zh"]) + "\n\n"
             
             # 株式データを取得
             stock = yf.Ticker(ticker)
-            
-            # 基本情報を取得
             info = stock.info
-            yield "## 📈 基本信息\n\n"
+            
+            hdr_info = {"zh": "## 📈 基本信息", "ja": "## 📈 基本情報", "en": "## 📈 Basic Info"}
+            yield hdr_info.get(ui_lang, hdr_info["zh"]) + "\n\n"
+            
+            labels = {
+                "zh": {"company": "公司", "price": "当前价格", "mkt_cap": "市值", "pe": "市盈率"},
+                "ja": {"company": "企業名", "price": "現在値", "mkt_cap": "時価総額", "pe": "PER"},
+                "en": {"company": "Company", "price": "Price", "mkt_cap": "Mkt Cap", "pe": "P/E Ratio"}
+            }
+            L = labels.get(ui_lang, labels["zh"])
             
             company_name = info.get('longName', ticker.upper())
-            yield f"**公司:** {company_name}\n\n"
+            yield f"**{L['company']}:** {company_name}\n\n"
             
             current_price = info.get('currentPrice') or info.get('regularMarketPrice')
             if current_price:
-                yield f"**当前价格:** ${current_price:.2f}\n\n"
+                yield f"**{L['price']}:** ${current_price:.2f}\n\n"
             
             market_cap = info.get('marketCap')
             if market_cap:
-                # 時価総額をフォーマット
-                if market_cap >= 1_000_000_000_000:  # >= 1T
+                if market_cap >= 1_000_000_000_000:
                     formatted_cap = f"${market_cap / 1_000_000_000_000:.3f} T"
-                elif market_cap >= 1_000_000_000:  # >= 1B
+                elif market_cap >= 1_000_000_000:
                     formatted_cap = f"${market_cap / 1_000_000_000:.2f} B"
                 else:
                     formatted_cap = f"${market_cap:,.0f}"
-                yield f"**市值:** {formatted_cap}\n\n"
+                yield f"**{L['mkt_cap']}:** {formatted_cap}\n\n"
             
             pe_ratio = info.get('trailingPE')
             if pe_ratio:
-                yield f"**市盈率:** {pe_ratio:.2f}\n\n"
+                yield f"**{L['pe']}:** {pe_ratio:.2f}\n\n"
             
-            # 過去データを取得（直近30日）
+            # 過去データを取得
             end_date = datetime.now()
             start_date = end_date - timedelta(days=30)
             hist = stock.history(start=start_date, end=end_date)
             
-            change = 0.0  # 変動変数を初期化
+            change = 0.0
             if not hist.empty:
-                yield "## 📉 近期表现（30天）\n\n"
+                hdr_perf = {"zh": "## 📉 近期表现（30天）", "ja": "## 📉 最近のﾊﾟﾌｫｰﾏﾝｽ（30日）", "en": "## 📉 Recent Performance (30d)"}
+                yield hdr_perf.get(ui_lang, hdr_perf["zh"]) + "\n\n"
+                
+                perf_labels = {
+                    "zh": {"change": "30天涨跌", "high": "最高", "low": "最低", "vol": "平均成交量"},
+                    "ja": {"change": "30日騰落率", "high": "高値", "low": "安値", "vol": "平均出来高"},
+                    "en": {"change": "30d Change", "high": "High", "low": "Low", "vol": "Avg Volume"}
+                }
+                PL = perf_labels.get(ui_lang, perf_labels["zh"])
                 
                 first_price = hist['Close'].iloc[0]
                 last_price = hist['Close'].iloc[-1]
                 change = ((last_price - first_price) / first_price) * 100
                 
-                yield f"**30天涨跌:** {change:+.2f}%\n\n"
-                yield f"**最高:** ${hist['High'].max():.2f}\n\n"
-                yield f"**最低:** ${hist['Low'].min():.2f}\n\n"
-                yield f"**平均成交量:** {hist['Volume'].mean():,.0f}\n\n"
+                yield f"**{PL['change']}:** {change:+.2f}%\n\n"
+                yield f"**{PL['high']}:** ${hist['High'].max():.2f}\n\n"
+                yield f"**{PL['low']}:** ${hist['Low'].min():.2f}\n\n"
+                yield f"**{PL['vol']}:** {hist['Volume'].mean():,.0f}\n\n"
             
-            # ニュースを取得 — 上流コンテキストに既にニュースが含まれている場合はスキップ
+            # ニュース
             if context:
-                yield "## 📰 背景资讯\n\n"
-                yield "*（已从上一步骤获取，见上方搜索结果）*\n\n"
+                hdr_ctx = {"zh": "## 📰 背景资讯", "ja": "## 📰 背景情報", "en": "## 📰 Background Info"}
+                yield hdr_ctx.get(ui_lang, hdr_ctx["zh"]) + "\n\n"
+                msg_ctx = {"zh": "*（已从上一步骤获取）*", "ja": "*（前のｽﾃｯﾌﾟから取得済み）*", "en": "*（Fetched from previous step）*"}
+                yield msg_ctx.get(ui_lang, msg_ctx["zh"]) + "\n\n"
             else:
                 try:
                     news = stock.news
                     if news and len(news) > 0:
-                        valid_news = []
-                        for article in news[:5]:
+                        hdr_news = {"zh": "## 📰 最新新闻", "ja": "## 📰 最新ﾆｭｰｽ", "en": "## 📰 Latest News"}
+                        yield hdr_news.get(ui_lang, hdr_news["zh"]) + "\n\n"
+                        for idx, article in enumerate(news[:3], 1):
                             title = article.get('title') or article.get('headline')
-                            if title and title not in ['No title', '']:
-                                valid_news.append(article)
-
-                        if valid_news:
-                            yield "## 📰 最新新闻\n\n"
-                            for idx, article in enumerate(valid_news[:3], 1):
-                                title = article.get('title') or article.get('headline')
-                                link = article.get('link') or article.get('url') or ''
-                                publisher = article.get('publisher') or article.get('source') or '未知来源'
-
-                                yield f"{idx}. **{title}**\n"
-                                yield f"   *来源: {publisher}*\n"
-                                if link:
-                                    yield f"   [阅读更多]({link})\n\n"
-                except:
-                    pass
+                            link = article.get('link') or article.get('url') or ''
+                            yield f"{idx}. **{title}**\n"
+                            if link: yield f"   [Link]({link})\n"
+                        yield "\n"
+                except: pass
             
-            # AI分析を生成
-            yield "## 🤖 AI 分析\n\n"
-            yield "正在生成分析...\n\n"
+            # AI分析
+            hdr_ai = {"zh": "## 🤖 AI 分析", "ja": "## 🤖 AI 分析", "en": "## 🤖 AI Analysis"}
+            yield hdr_ai.get(ui_lang, hdr_ai["zh"]) + "\n\n"
             
-            # 値を安全にフォーマット
             price_str = f"${current_price:.2f}" if current_price else "N/A"
-            cap_str = f"${market_cap:,.0f}" if market_cap else "N/A"
-            pe_str = f"{pe_ratio:.2f}" if pe_ratio else "N/A"
-            high_str = f"${hist['High'].max():.2f}" if not hist.empty else "N/A"
-            low_str = f"${hist['Low'].min():.2f}" if not hist.empty else "N/A"
-            
-            context_section = ""
-            if context:
-                context_section = f"\n\n## 背景资讯（来自网络搜索，仅供参考）\n{context[:3000]}\n"
+            context_section = f"\n\n## 背景资讯\n{context[:3000]}\n" if context else ""
 
             analysis_prompt = f"""分析以下 {company_name} ({ticker}) 的股票数据：
-
 当前价格: {price_str}
-市值: {cap_str}
-市盈率: {pe_str}
 30天涨跌: {change:+.2f}%
-30天最高: {high_str}
-30天最低: {low_str}
 {context_section}
-请提供简要的技术分析，包括：
-1. 价格趋势和动量
-2. 关键支撑/阻力位
-3. 整体展望（看涨/看跌/中性）
-{"4. 结合背景资讯中与 " + ticker.upper() + " 直接相关的内容，说明近期消息对股价的潜在影响；背景资讯中与 " + ticker.upper() + " 无关的内容请忽略" if context else ""}
-
-保持分析简洁（3-4段）且可操作。请用简体中文回答。"""
+请提供简要的技术分析（趋势、支撑、展望）。**请使用 {target_lang} 回答。**"""
 
             messages = [
-                {"role": "system", "content": "你是一位金融分析师，提供股票分析。请客观、数据驱动，使用简体中文回答。请避免重复内容，每个观点只陈述一次。"},
+                {"role": "system", "content": f"你是一位金融分析师。请客观并使用 **{target_lang}** 回答。"},
                 {"role": "user", "content": analysis_prompt},
             ]
             response, warning = groq_client.chat_completion(
                 messages, stream=True, temperature=0.3, max_tokens=800, task_type="heavy"
             )
-            if warning:
-                yield f"\n\n{warning}\n\n"
-
             for chunk in response:
                 if chunk.choices[0].delta.content:
                     yield chunk.choices[0].delta.content
             
-            yield "\n\n"
-            yield "---\n\n"
-            yield "*⚠️ 免责声明: 此分析仅供参考，不构成投资建议。*\n"
+            yield "\n\n---\n\n"
+            disclaimer = {
+                "zh": "*⚠️ 免责声明: 此分析仅供参考，不构成投资建议。*",
+                "ja": "*⚠️ 免責事項: この分析は参考用であり、投資勧誘を目的としたものではありません。*",
+                "en": "*⚠️ Disclaimer: This analysis is for reference only and does not constitute investment advice.*"
+            }
+            yield disclaimer.get(ui_lang, disclaimer["zh"]) + "\n"
             
         except Exception as e:
-            yield f"❌ **股票分析出错:** {str(e)}\n"
-            yield "\n请验证股票代码是否正确。\n"
+            yield f"❌ Error: {str(e)}\n"
 
 
 def run(params: dict) -> Generator[str, None, None]:
-    """
-    スキルのエントリーポイント
-
-    Args:
-        params: 'ticker'キーとオプションの'context'キーを含む辞書
-                'context'は、このスキルが上流スキルの後に実行される場合、
-                pipeline.pyによって自動的に注入される。
-
-    Yields:
-        株式分析結果
-    """
+    """スキルのエントリーポイント"""
     ticker = params.get("ticker")
     if not ticker:
-        yield "❌ Error: 'ticker' parameter is required\n"
+        yield "❌ Error: 'ticker' is required\n"
         return
 
     context = params.get("context", "")
+    ui_lang = params.get("ui_lang", "zh")
     skill = StockAnalysisSkill()
-    yield from skill.execute(ticker, context)
-
-
-# テスト用
-if __name__ == "__main__":
-    import sys
-    
-    test_ticker = "AAPL"
-    if len(sys.argv) > 1:
-        test_ticker = sys.argv[1]
-    
-    print(f"Testing stock_analysis skill with ticker: {test_ticker}\n")
-    print("="*80)
-    
-    for chunk in run({"ticker": test_ticker}):
-        print(chunk, end="", flush=True)
-
+    yield from skill.execute(ticker, context, ui_lang)

@@ -15,19 +15,21 @@ class CodeGenerationSkill:
     def __init__(self):
         pass
     
-    def execute(self, requirement: str, language: str = "Python") -> Generator[str, None, None]:
+    def execute(self, requirement: str, language: str = "Python", ui_lang: str = "zh") -> Generator[str, None, None]:
         """
         コード生成を実行して結果をストリーム
-        
-        Args:
-            requirement: 生成するコードの説明
-            language: プログラミング言語（デフォルト: Python）
-            
-        Yields:
-            説明付きの生成されたコード
         """
         try:
-            yield f"💻 正在生成 **{language}** 代码：*{requirement}*\n\n"
+            lang_names = {"zh": "简体中文", "ja": "日本語", "en": "English"}
+            target_lang_name = lang_names.get(ui_lang, "简体中文")
+            
+            # ステータスメッセージの多言語化
+            status_map = {
+                "zh": f"💻 正在生成 **{language}** 代码：*{requirement}*",
+                "ja": f"💻 **{language}** ｺｰﾄﾞを生成しています：*{requirement}*",
+                "en": f"💻 Generating **{language}** code for: *{requirement}*"
+            }
+            yield status_map.get(ui_lang, status_map["zh"]) + "\n\n"
             yield "---\n\n"
             
             # コード生成用のプロンプトを構築
@@ -43,10 +45,10 @@ class CodeGenerationSkill:
 5. 适当添加错误处理
 6. 如有帮助，添加使用示例
 
-请提供完整、可运行的代码。使用简体中文注释和说明。"""
+请提供完整、可运行的代码。**所有注释和说明必须使用 {target_lang_name}。**"""
 
             messages = [
-                {"role": "system", "content": f"你是一位专业的 {language} 程序员。生成简洁、高效、文档完善的代码。所有注释和说明使用简体中文。"},
+                {"role": "system", "content": f"你是一位专业的 {language} 程序员。生成简洁、高效、文档完善的代码。**所有注释和说明必须使用 {target_lang_name}。**"},
                 {"role": "user", "content": prompt},
             ]
             response, warning = groq_client.chat_completion(
@@ -95,22 +97,17 @@ class CodeGenerationSkill:
 def run(params: dict) -> Generator[str, None, None]:
     """
     スキルのエントリーポイント
-    
-    Args:
-        params: 'requirement'とオプションの'language'キーを含む辞書
-        
-    Yields:
-        生成されたコード
     """
     requirement = params.get("requirement")
     if not requirement:
-        yield "❌ 错误：缺少 'requirement' 参数\n"
+        yield "❌ Error: Missing 'requirement'\n"
         return
     
     language = params.get("language", "Python")
+    ui_lang = params.get("ui_lang", "zh") # 获取注入的语言
     
     skill = CodeGenerationSkill()
-    yield from skill.execute(requirement, language)
+    yield from skill.execute(requirement, language, ui_lang)
 
 
 # テスト用

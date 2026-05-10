@@ -63,30 +63,38 @@ class CodeGenerationSkill:
             
             yield "\n\n"
             yield "---\n\n"
-            yield "✅ **代码生成完成！**\n\n"
+            done_map = {
+                "zh": "✅ **代码生成完成！**",
+                "ja": "✅ **ｺｰﾄﾞの生成が完了しました！**",
+                "en": "✅ **Code generation complete!**"
+            }
+            yield done_map.get(ui_lang, done_map["zh"]) + "\n\n"
             
             # 役立つヒントを追加
-            yield "### 💡 后续步骤\n\n"
+            steps_label = {"zh": "### 💡 后续步骤", "ja": "### 💡 次のｽﾃｯﾌﾟ", "en": "### 💡 Next Steps"}
+            yield steps_label.get(ui_lang, steps_label["zh"]) + "\n\n"
             
             if language.lower() == "python":
-                yield "1. 将代码保存为 `.py` 文件\n"
-                yield "2. 安装所需依赖\n"
-                yield "3. 使用 `python filename.py` 运行\n"
+                if ui_lang == "ja":
+                    yield "1. ｺｰﾄﾞを `.py` ﾌｧｲﾙとして保存します\n2. 必要な依存関係をｲﾝｽﾄｰﾙします\n3. `python filename.py` で実行します\n"
+                elif ui_lang == "en":
+                    yield "1. Save the code as a `.py` file\n2. Install required dependencies\n3. Run with `python filename.py`\n"
+                else:
+                    yield "1. 将代码保存为 `.py` 文件\n2. 安装所需依赖\n3. 使用 `python filename.py` 运行\n"
             elif language.lower() in ["javascript", "js"]:
-                yield "1. 将代码保存为 `.js` 文件\n"
-                yield "2. 使用 `npm install` 安装依赖\n"
-                yield "3. 使用 `node filename.js` 运行\n"
-            elif language.lower() in ["java"]:
-                yield "1. 将代码保存为 `.java` 文件\n"
-                yield "2. 使用 `javac filename.java` 编译\n"
-                yield "3. 使用 `java ClassName` 运行\n"
-            elif language.lower() in ["c++", "cpp"]:
-                yield "1. 将代码保存为 `.cpp` 文件\n"
-                yield "2. 使用 `g++ filename.cpp -o output` 编译\n"
-                yield "3. 使用 `./output` 运行\n"
+                if ui_lang == "ja":
+                    yield "1. ｺｰﾄﾞを `.js` ﾌｧｲﾙとして保存します\n2. `npm install` で依存関係をｲﾝｽﾄｰﾙします\n3. `node filename.js` で実行します\n"
+                elif ui_lang == "en":
+                    yield "1. Save the code as a `.js` file\n2. Install dependencies with `npm install`\n3. Run with `node filename.js`\n"
+                else:
+                    yield "1. 将代码保存为 `.js` 文件\n2. 使用 `npm install` 安装依赖\n3. 使用 `node filename.js` 运行\n"
             else:
-                yield "1. 将代码保存为适当的文件\n"
-                yield "2. 按照语言特定的编译/执行步骤操作\n"
+                if ui_lang == "ja":
+                    yield "1. ｺｰﾄﾞを適切なﾌｧｲﾙとして保存します\n2. 実行手順に従ってください\n"
+                elif ui_lang == "en":
+                    yield "1. Save the code as an appropriate file\n2. Follow execution steps\n"
+                else:
+                    yield "1. 将代码保存为适当的文件\n2. 按照执行步骤操作\n"
             
             yield "\n"
             

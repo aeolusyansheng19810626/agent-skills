@@ -142,7 +142,7 @@ class RouterAgent:
    - 当用户明确指定数量（如"查两条"、"查三条"、"找5个"等），提取数字并传 max_results=数字
    - 当用户说"详细搜索"、"全面搜索"、"多找一些"等时，传 max_results=5
    - 其他情况不传 max_results（使用默认值3）
-8. reasoning 字段必须是一句通顺的简体中文，简明说明为什么选择该技能或计划。例如："用户同时要求搜索苹果新闻和分析AAPL股票，使用并行组同时执行。" 禁止输出乱码、繁体中文或非中文内容
+8. reasoning 字段应简明说明选择该技能的原因。语言应尽量与用户查询的语言保持一致（例如用户使用日语，reasoning 也可以使用日语；默认为简体中文）。
 9. 仅当用户明确表达串行意图（"搜索后分析"、"先查再..."等）时才使用串行 plan；单一意图始终用单技能格式
 10. 仅当用户明确表达并行意图（"同时"、"并行"、"一起"等）时才在 plan 中使用 parallel 组
 11. 当用户使用条件句（"如果...就..."、"不足则..."、"必要时..."、"如有需要..."等）描述后续动作时，属于动态意图，只返回第一步技能（单技能格式），不要创建固定 plan。后续步骤由系统自动评估是否需要追加
@@ -167,13 +167,27 @@ class RouterAgent:
                 {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": user_query},
             ]
-            response, warning = groq_client.chat_completion(
-                messages,
-                temperature=0.1,
-                max_tokens=500,
-                response_format={"type": "json_object"},
-                task_type="standard",
-            )
+            # 第一次尝试：使用 json_object 强制约束
+            try:
+                response, warning = groq_client.chat_completion(
+                    messages,
+                    temperature=0.1,
+                    max_tokens=500,
+                    response_format={"type": "json_object"},
+                    task_type="standard",
+                )
+            except Exception as e:
+                # 如果发生 400 错误（通常是 JSON 生成失败），尝试不带约束重试一次
+                if "400" in str(e):
+                    response, warning = groq_client.chat_completion(
+                        messages,
+                        temperature=0.1,
+                        max_tokens=500,
+                        task_type="standard",
+                    )
+                else:
+                    raise e
+
             if warning:
                 try:
                     import streamlit as st
@@ -184,7 +198,22 @@ class RouterAgent:
             content = response.choices[0].message.content
             if content is None:
                 raise ValueError("LLM returned empty response")
-            result = json.loads(content)
+            
+            # 尝试解析 JSON
+            try:
+                # 处理可能存在的 markdown 代码块
+                clean_content = content.strip()
+                if clean_content.startswith("```json"):
+                    clean_content = clean_content[7:]
+                    if clean_content.endswith("```"):
+                        clean_content = clean_content[:-3]
+                elif clean_content.startswith("```"):
+                    clean_content = clean_content[3:]
+                    if clean_content.endswith("```"):
+                        clean_content = clean_content[:-3]
+                result = json.loads(clean_content.strip())
+            except json.JSONDecodeError:
+                raise ValueError(f"Failed to parse LLM response as JSON: {content[:100]}...")
             
             # 結果の構造を検証
             if "reasoning" not in result:
@@ -222,13 +251,6 @@ class RouterAgent:
             
             return result
             
-        except json.JSONDecodeError as e:
-            return {
-                "skill": "none",
-                "params": {},
-                "reasoning": f"Failed to parse LLM response: {str(e)}",
-                "error": str(e)
-            }
         except Exception as e:
             return {
                 "skill": "none",
